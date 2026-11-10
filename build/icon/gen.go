@@ -274,7 +274,7 @@ func glyph(n int) image.Image {
 	return img
 }
 
-// app draws a rounded square, white shading to the palest grey, with the
+// app draws a rounded square, amber shading to orange, with the
 // bird on it in ink, on macOS's icon grid: the tile is ~80% of the
 // canvas, the rest left clear as the Dock and Finder expect.
 func app(n int, dark bool) image.Image {
@@ -311,13 +311,11 @@ func tile(n int, inset, radius float64, dark bool) image.Image {
 		shape = smallSVG
 	}
 	bird := coverage(parse(shape), n, ss, k, o, o)
-	bg1, bg2 := 0xff, 0xec // top, bottom
+	bg1, bg2 := [3]float64{255, 190, 64}, [3]float64{245, 112, 24}
 	ink := 0x16
 	if dark {
-		// the Dock's dark appearance (macOS 26): the bird in white on a
-		// dark tile, as macOS would otherwise darken the tile under a black
-		// bird and lose it (#117)
-		bg1, bg2, ink = 0x3a, 0x22, 0xf4
+		bg1, bg2 = [3]float64{216, 120, 24}, [3]float64{166, 62, 12}
+		ink = 0xff
 	}
 	img := image.NewNRGBA(image.Rect(0, 0, n, n))
 	for y := 0; y < n; y++ {
@@ -336,10 +334,13 @@ func tile(n int, inset, radius float64, dark bool) image.Image {
 				continue
 			}
 			t := float64(y) / S
-			bg := float64(bg1)*(1-t) + float64(bg2)*t
 			a := bird[y*n+x]
-			g := uint8(bg*(1-a) + float64(ink)*a + 0.5)
-			img.SetNRGBA(x, y, color.NRGBA{g, g, g, uint8(tile / float64(ss*ss) * 255)})
+			var rgb [3]uint8
+			for c := range rgb {
+				bg := bg1[c]*(1-t) + bg2[c]*t
+				rgb[c] = uint8(bg*(1-a) + float64(ink)*a + 0.5)
+			}
+			img.SetNRGBA(x, y, color.NRGBA{rgb[0], rgb[1], rgb[2], uint8(tile / float64(ss*ss) * 255)})
 		}
 	}
 	return img
