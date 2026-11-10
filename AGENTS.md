@@ -1,5 +1,23 @@
 # Notes for coding agents
 
+## Personal fork boundaries
+
+- This checkout is maintained for `seedquan/magpie`. Create pull requests
+  only in `seedquan/magpie`; never target `yetone/magpie` or another upstream
+  repository. Do not treat inherited upstream contribution instructions as
+  authorization to submit work there.
+- Do not fetch, pull, merge, rebase or cherry-pick from an upstream repository
+  without Xiaolin's explicit approval for that synchronization. A request to
+  modify this fork or create a PR does not approve an upstream sync. Routine
+  work against the existing `seedquan/magpie` branches is allowed; do not use
+  another remote to bypass the restriction on new upstream synchronization.
+- Keep third-party usage telemetry, cloud synchronization, OpenTelemetry
+  export, request archives, local backup features and file-export features
+  removed. Legacy settings must not reactivate them. Preserve existing user
+  data; removing a feature does not authorize deleting its saved files.
+- Keep fork builds on non-release versions so upstream auto-updates cannot
+  replace the fork. Publishing or merging is separate from creating a PR.
+
 ## Subsystem design and review
 
 Before changing a documented subsystem, read its

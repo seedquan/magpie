@@ -1,3 +1,14 @@
+# Fork privacy regressions
+
+`privacy-usage-stats.test.cjs` checks that telemetry, backup and sync controls
+stay absent, including when legacy settings enable them. It runs in Chromium
+and WebKit, five languages and wide and narrow windows.
+
+`usage-local-requests.test.cjs` checks that local Requests still load, display
+their totals, fit a narrow window and filter correctly after export and archive
+controls are removed. It runs in both browsers and all five languages, without
+reading user data or making external requests.
+
 # Dropdown browser regression
 
 `agent-details-ready.test.cjs` holds the first settings read and the lazy
@@ -87,7 +98,7 @@ fails, and the error goes to the status line.
 `gateway-caller-keys.test.cjs` checks the named caller-key list on the
 Gateway page, including creation, copying, renaming, disabling, enabling,
 rotation and deletion. It verifies key-level usage overview, request filtering and
-CSV export in Chinese and English on Chromium and WebKit. The fixtures do
+local request details in Chinese and English on Chromium and WebKit. The fixtures do
 not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
 and confirmation before rotation/removal (Cancel and Escape send no mutation).
 Creation, renaming and confirmation focus their controls without scrolling.
@@ -137,14 +148,14 @@ window, in Chinese and English.
 
 `api-key-usage.test.cjs` exercises the existing provider key list: adding,
 enabling and disabling, choosing the first key, renaming and removing.
-The Usage page's Gateway key rows, request filter and CSV exports identify
+The Usage page's Gateway key rows and request filter identify
 client keys, not those provider credentials. A client using different
 upstream keys stays grouped together; renaming an upstream key does not
 rename the client. It also checks historical records, Chinese and English,
 and the narrow window in Chromium and WebKit.
 The API fixtures use test keys and never read local user configuration.
 The existing `usage-ledger.test.cjs` also checks request-route and caller-key
-filters together, CSV export, and restoring the previous caller filter when
+filters together and restoring the previous caller filter when
 the request filter is cleared. A caller absent from the period's options clears
 the filter and reloads the unfiltered rows from the first page.
 
@@ -183,7 +194,7 @@ Japanese and German, at 900px and 440px. Run with
 `purpose-filter.test.cjs` checks Usage and Routing purpose filters (#742) in
 English and Chinese on Chromium and WebKit. It covers title aliases, literal
 unknown names, unmarked records, pagination and totals, combined failure
-filters and CSV export, route navigation, session grouping, historical days
+filters, route navigation, session grouping, historical days
 and the narrow layout. Routing also covers keyboard dismissal and clearing
 the purpose while keeping the selected day and session grouping. Checkbox
 selection also covers combining purposes, immediate updates without closing
@@ -948,7 +959,7 @@ signed in; in English and Chinese.
 
 `settings-sections.test.cjs` checks the Settings page in parts (#471): a tab
 list at its top — General, Usage, Network and sharing, Models, Privacy,
-Observability, Sync and backup, About — each tab showing its part's rows
+About — each tab showing its part's rows
 alone, posting nothing and leaving the page and the tab where they were; a
 part's controls still posting what they did; one tab in the Tab order and
 the arrows, Home and End along them; the part kept in the address
@@ -1164,15 +1175,14 @@ answered with another model and plain on a dated name, a failure's red dot
 and 429 and its agent, on another computer whose magpie passed it on, as
 "Codex · via office-mac", the totals over them. Older and Newer page through 130 requests
 with the pager held where it was; the agent, Failed and search filters and
-the period ask the server again from the first page; Export CSV posts the
-filters shown with no page and says where the file went. At the window's
+the period ask the server again from the first page. At the window's
 narrowest (560) the table scrolls in its box and no tab scrolls the page
 sideways; no left-border stripe; in English and Chinese, light and dark.
 
 `usage-ledger.test.cjs` also follows a request from Usage to its routing
 story and back to every usage row sharing that route ID. It checks archived
 routes with no live gateway, cleared history, rows recorded before IDs were
-kept, clearing the route filter and exporting it, in Chromium and WebKit,
+kept and clearing the route filter, in Chromium and WebKit,
 English and Chinese.
 
 `sessions-overview.test.cjs` checks the Usage page's Sessions overview: six
@@ -1318,8 +1328,8 @@ keeps the others in sight; the metric and the split are remembered; a click
 moves nothing. At 560 the ranking goes under the chart and the totals two to a
 row, a wider window redraws it, a metric with no price says so, and with no
 request listed there is nothing; in English and Chinese, light and dark.
-The daily chart also checks selection, gray bars on other days, filtered rows
-and CSV, an empty day, clearing a selection, keyboard input and resizing.
+The daily chart also checks selection, gray bars on other days, filtered rows,
+an empty day, clearing a selection, keyboard input and resizing.
 
 `usage-model-at-provider.test.cjs` splits the Requests tab's chart by "Model ·
 provider" (inaction on Discord): one model at two providers is two rows of the
@@ -1693,53 +1703,6 @@ rest, tagged "proxy not reachable", in English and Chinese, never "an error
 another account wouldn't fix"; picking the request doesn't move the page.
 Chromium and WebKit, API faked.
 
-`s3-sync.test.cjs` sets up sync to an S3 bucket from Settings (#296). It
-works as follows, in English and Chinese:
-
-- WebDAV is picked first. Picking S3 shows the fields for the endpoint,
-  bucket, prefix, region, access key, secret and path-style, each label
-  fitting its column. Switching between WebDAV and S3 leaves the page where
-  it was, and what was typed for WebDAV is still there after switching back.
-- With no bucket, the form says so and posts nothing.
-- Save posts `s3://bucket/prefix`, the access key as the user and the
-  secret as the password, together with the endpoint, region and path-style.
-  The row then reads "S3 sync" with the bucket and server.
-- Edit opens the form with S3 picked, marked "S3 · on", and the fields as
-  saved. The secret field is empty, with "saved" as its placeholder.
-
-`github-sync.test.cjs` checks that Settings offers GitHub beside WebDAV and
-S3 in English, Chinese, Traditional Chinese, Japanese and German at 900px and 440px. It verifies
-the owner/repo, optional folder and branch, separate GitHub token, passphrase
-and sync toggles are posted as expected, rejects an incomplete binding and
-reopens the saved setup with the token kept secret. The API is faked; the
-test never contacts GitHub.
-
-`sync-other-kind.test.cjs` checks that moving sync between WebDAV and S3
-keeps the other's settings (ARNO on Discord: trying S3 wiped the WebDAV
-address, user and password). With S3 synced to and a WebDAV server kept,
-the row ends "WebDAV settings kept", the form marks S3 "on" and says the
-WebDAV settings are kept; picking WebDAV, which leaves the page where it
-was, shows the kept address and user, the password as saved, says saving
-moves sync there and the button reads "Move sync to WebDAV". Saving posts
-that server with the password left empty for the one kept, and the row
-then reads "WebDAV sync", "S3 settings kept". English and Chinese,
-Chromium and WebKit, API faked. Before the fix the WebDAV fields were
-empty and nothing said which was on or kept.
-
-`webdav-settings-refresh.test.cjs` checks the Settings page's sync row
-against a setup changed behind the window (#305: magpie webdav / magpie s3
-at the terminal): the faked `/api/davsync` answers differently between
-reads, and the window's focus — or the page becoming visible again — must
-re-read it, the row, its status and the form's ticks following what the CLI
-left (a WebDAV setup with agents and the library out, then an S3 one) rather
-than what the page first read. A focus while a form is open never rebuilds
-it: what was typed stays (#104). Off, the description is built from the
-view's toggles and names only what is turned on — providers without their
-API keys, no agents' models — as the CLI's list does; a view that says
-nothing of the toggles reads as the whole lot. English and Chinese,
-Chromium and WebKit. Before the fix, the row kept the first view it had
-read and the description was the hardcoded whole list.
-
 `market-have.test.cjs` checks that the Library's Discover cards follow
 the library without the window being focused again (#300). Removing a
 server (Remove from the library) turns its card from "✓ Added" back to
@@ -2007,26 +1970,6 @@ unticked), each a click from a group; `?view=groups&newgroup=` opens the
 window on one, and the tray panel asks `window/main` for it. The page doesn't
 move, no left-border accent; English and Chinese, Chromium and WebKit.
 
-`request-archive.test.cjs` turns the request archive on and off from its
-switch at the top right of the Usage page's request list (Jorben on Discord):
-off unless turned on, refused with sync not set up with an s3:// bucket (the
-reason in the footer, the switch left off), on with one, the bucket in its
-tooltip, and a failed upload said beside it. The Gateway page has no switch
-any more, and its recent calls, even one the archive kept, show their own
-bodies with no "Fetch from archive" under them. No click moves the page; no
-left-border accent. English and Chinese, Chromium and WebKit, with
-`/api/plugins` faked.
-
-`request-archive-usage.test.cjs` opens the request archive from the Usage
-page's Requests (jorben, #447): a request the archive kept names it in its
-row's details, with "Fetch from archive" and "Download"; fetched, a body past
-256 KB is said by its size and a note to download it, and an archive too large
-to read on the page says so. Download in the app posts `archive/export` and
-says where the file was saved; in magpie web it follows a download link to
-`archive/file`. A request with no copy, with the archive on, says "Not
-archived". No click moves the page; no left-border accent; every new string
-has its Chinese. English and Chinese, app and web, Chromium and WebKit.
-
 `providers-off-fold.test.cjs` checks that providers switched off are kept
 apart (01huadalang on Discord): the Providers list holds the ones on, and the
 ones off sit below it under a "Turned off (N)" fold (已关闭的供应商), folded at
@@ -2065,9 +2008,8 @@ move; English and Chinese, Chromium and WebKit.
 on Discord: no request archive switch and no usage chart icons in the remote
 web UI, and a 404 for `/wails/runtime.js`). With `web` set the page never
 asks for `/wails/runtime.js`, which the browser has none of, and nothing
-fails to load; the app's window still loads it. The request archive's switch
-over the Usage page's requests is there and posts `settings/archive` without
-moving the page, and the Usage page's chart draws its columns with each provider's icon
+fails to load; the app's window still loads it. Archive controls stay absent,
+and the Usage page's chart draws its columns with each provider's icon
 in its ranking. English and Chinese, Chromium and WebKit, with the API and
 `/api/plugins` faked. Go's `TestPageFilesRevalidate` checks that the page's
 files go out with `Cache-Control: no-cache` and an ETag of their content, so
@@ -2208,25 +2150,6 @@ with a known session creator. Unknown gateway providers retain their own label.
 Creator emails and recorded provider IDs appear separately in request details.
 Third-party OpenCode gateway calls retain the actual relay. These regressions
 run in Chromium and WebKit, English and Chinese.
-
-`otel.test.cjs` checks OTLP export and metrics start off, endpoint and masked
-headers save in English and Chinese, environment overrides are indicated, and
-other preference saves retain OTLP choices. It also checks all three content modes,
-reload persistence, and readable consent and full-width fields in narrow windows.
-It runs in Chromium and WebKit
-with the real assets and an isolated API fixture:
-
-```sh
-node --test internal/gui/tests/otel.test.cjs internal/gui/tests/otel-langfuse.test.cjs
-```
-
-`otel-langfuse.test.cjs` checks the Langfuse setup: picking Langfuse and giving
-two keys saves Cloud EU's endpoint, the Basic header, the ingestion header,
-metrics off and export on, and nothing is saved on one key alone; Cloud US and
-a self-hosted address change only the endpoint. A Langfuse set up by hand opens
-with its keys filled in, nothing saved on opening, and a changed key keeps its
-other headers, metrics and export choice; another collector's headers aren't
-carried over. Every language at 1100, 520 and 360px, in Chromium and WebKit.
 
 `account-arrange.test.cjs` drags a subscription's accounts and a provider's
 keys by their rows (no handle) in every routing mode, and by Alt+↑/↓: the

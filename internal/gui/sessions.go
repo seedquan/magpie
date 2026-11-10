@@ -345,35 +345,6 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, t)
 	})
-	// markdown is a session's whole conversation as a Markdown file (#1276),
-	// read from the agent's own file as transcript is: to the browser that
-	// asks (magpie web), which saves it itself, and, in the app, to
-	// Downloads.
-	mux.HandleFunc("GET /api/sessions/markdown", func(rw http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"))
-		if err != nil {
-			fail(rw, err)
-			return
-		}
-		rw.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		rw.Header().Set("Content-Disposition", `attachment; filename="`+stem+`.md"`)
-		rw.Write(md)
-	})
-	mux.HandleFunc("POST /api/sessions/export", func(rw http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"))
-		if err != nil {
-			fail(rw, err)
-			return
-		}
-		path, err := saveDownload(downloads(), stem, ".md", bytes.NewReader(md))
-		if err != nil {
-			fail(rw, err)
-			return
-		}
-		writeJSON(rw, map[string]any{"path": tilde(path)})
-	})
 	// terminal opens Terminal on a session's resume command, or, with In, on
 	// the command that carries it on in that other agent. The command is
 	// made here from the session as listed, never taken from the page.

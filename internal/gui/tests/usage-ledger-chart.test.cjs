@@ -306,8 +306,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await p.setViewportSize({ width: 1100, height: 760 });
       await p.waitForTimeout(100);
       assert.equal(await p.locator('#ledChart .led-day[aria-pressed="true"]').count(), 1, "resize keeps selection");
-      await p.locator("#ledExport").click();
-      await lastAsked(exported, (q) => q.get("day") === day);
+      assert.equal(await p.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
       await p.locator('#ledChart .led-day[aria-pressed="true"]').click();
       await lastAsked(asked, (q) => !q.has("day"));
       await p.waitForFunction(() => document.querySelectorAll("#ledWrap tr.led-row").length === 6);

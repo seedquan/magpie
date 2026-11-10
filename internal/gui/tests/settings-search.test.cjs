@@ -212,19 +212,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await t.test("built-ins are found, and Open goes to their row", async () => {
       const row = (id, name, sub, on, more) => ({ id, name, sub, on, chosen: on, source: "preset", state: on ? "active" : "off", inUse: 0, ...more });
       const builtins = [
-        row("otel", "Observability", "Send each request's trace to an OpenTelemetry collector", false, { setAt: "otel #otelList" }),
         row("gateway", "Gateway page", "", true, { page: "gateway", setAt: "network #portList", config: { callsPage: 20 },
           schema: { type: "object", properties: { callsPage: { type: "integer", title: "Recent calls at a time", description: "How many of the gateway's recent calls the page shows, and how many more each Show more adds", enum: [10, 20, 50, 100], default: 20 } } } }),
       ];
       for (const lang of LANGS) {
         const posts = [];
-        const page = await open(lang, posts, { builtins, off: ["otel"] });
+        const page = await open(lang, posts, { builtins, off: [] });
         const tr = (s, vars) => page.evaluate(([s, vars]) => t(s, vars), [s, vars]);
         const found = page.locator("#setFeats .feat-find:visible");
         for (const [words, want] of [
           [await tr("Recent calls at a time"), [[await tr("Gateway page"), ""]]],
           ["recent calls", [[await tr("Gateway page"), ""]]],
-          [await tr("Observability"), [[await tr("Observability"), await tr("Off") + " · " + await tr("Send each request's trace to an OpenTelemetry collector")]]],
           ["zzqqxx", []],
         ]) {
           await type(page, words.toLowerCase());
@@ -237,7 +235,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           if (want.length) assert.equal(await page.locator("#setFeats").getAttribute("data-part"), await tr("Plugins") + " › " + await tr("Built-in"));
           assert.deepEqual(await overflow(page), []);
         }
-        await type(page, await tr("Observability"));
+        await type(page, "recent calls");
         shots.push([lang + "-builtins", await page.screenshot()]);
         await type(page, "");
         assert.equal(await seen(page, "#setFeats"), false, "put away with the search");

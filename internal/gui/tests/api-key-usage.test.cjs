@@ -149,13 +149,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 1);
       assert.equal(requests.at(-1).get("callerKey"), "laptop");
       assert.equal(requests.at(-1).get("failed"), "1");
-      await page.locator("#ledExport").click();
-      await page.waitForFunction(() => document.querySelector("#status").textContent.includes("keys.csv"));
-      const exported = requests.findLast((q) => q.method === "POST");
-      assert.equal(exported.get("callerKey"), "laptop");
-      assert(!exported.has("key"));
-      assert.equal(exported.get("failed"), "1");
-      assert(!exported.has("offset") && !exported.has("limit"));
+      assert.equal(await page.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
       await page.locator("#ledStatus .opt").first().click();
       await page.locator("#ledKey").click();
       await page.locator(".sess-menu .pm-item", { hasText: w.all }).click();

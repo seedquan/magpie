@@ -56,7 +56,7 @@ func TestBuiltinSwitch(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatal(err)
 		}
-		if len(out) != 14 {
+		if len(out) != 13 {
 			t.Fatalf("the built-ins: %+v", out)
 		}
 		for _, b := range out {
@@ -81,11 +81,11 @@ func TestBuiltinSwitch(t *testing.T) {
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	if rec := postBuiltin(h, `{"id":"otel","on":false}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "in use") {
+	if rec := postBuiltin(h, `{"id":"otel","on":false}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("otel off while in use: %d %s", rec.Code, rec.Body)
 	}
 	for _, b := range builtinsState() {
-		if b.ID == "otel" && (!b.On || b.Chosen || b.InUse != 1 || b.Use != "Sending to a collector" || b.Source != pluginrt.FromInUse) {
+		if b.ID == "otel" {
 			t.Fatalf("otel in use: %+v", b)
 		}
 	}
@@ -135,7 +135,7 @@ func TestBootSaysBuiltinsOff(t *testing.T) {
 	if err := pluginrt.Set("library", true); err != nil {
 		t.Fatal(err)
 	}
-	if b := boot(); !strings.Contains(b, `"featuresOff":["groups","otel","sessions","warmups"]`) {
+	if b := boot(); !strings.Contains(b, `"featuresOff":["groups","sessions","warmups"]`) {
 		t.Fatalf("Essentials picked: %s", b)
 	}
 }
@@ -373,7 +373,6 @@ func TestBuiltinSaysWhereItsSettingsAre(t *testing.T) {
 	want := map[string][3]string{
 		"redact":   {"privacy #redactList", "masking", ""},
 		"search":   {"models #searchList", "", ""},
-		"otel":     {"otel #otelList", "", ""},
 		"gateway":  {"network #portList", "gateway", ""},
 		"library":  {"", "library", ""},
 		"groups":   {"", "", "groups"},

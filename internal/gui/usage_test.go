@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,43 +55,11 @@ func TestUsageLedgerDayRoutes(t *testing.T) {
 	if l.Bucket != "day" || len(l.Series) != 7 || calls != 4 || len(l.ChartBy["provider"]) != 1 || l.ChartBy["provider"][0].Calls != 4 {
 		t.Fatalf("the whole chart: %+v", l)
 	}
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage/requests.csv?"+q.Encode(), nil))
-	csvData := w.Body.String()
-	rows, err := csv.NewReader(w.Body).ReadAll()
-	if w.Code != 200 || err != nil || len(rows) != 3 {
-		t.Fatalf("day's CSV: %d %s (%v)", w.Code, w.Body, err)
-	}
-	want := "magpie-requests-day-" + l.Day
-	if got := w.Header().Get("Content-Disposition"); got != `attachment; filename="`+want+`.csv"` {
-		t.Fatalf("day's CSV filename: %s", got)
-	}
-	for _, suffix := range []string{"", "-2"} {
-		w = httptest.NewRecorder()
-		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/usage/requests/export?"+q.Encode(), nil))
-		var out struct {
-			Path string
-			Rows int
-		}
-		if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != 200 || err != nil || out.Rows != 2 || out.Path != filepath.Join("~", "Downloads", want+suffix+".csv") {
-			t.Fatalf("day's export: %d %s", w.Code, w.Body)
-		}
-		b, err := os.ReadFile(filepath.Join(home, "Downloads", want+suffix+".csv"))
-		if err != nil || string(b) != csvData {
-			t.Fatalf("saved CSV differs from the download: %v", err)
-		}
-	}
-	for _, row := range rows[1:] {
-		at, err := time.Parse(time.RFC3339Nano, row[0])
-		if err != nil || at.In(time.Local).Format(time.DateOnly) != l.Day {
-			t.Fatalf("CSV included another day: %v", row)
-		}
-	}
+
 }
 
 // The Usage page's Requests: a page of the ledger at a time, newest first,
-// with the filters' rows counted on every page, and Export CSV writing all
-// of them to Downloads, never over an earlier file.
+// with the filters' rows counted on every page, with no file export.
 func TestUsageLedgerRoutes(t *testing.T) {
 	home := sandboxHome(t)
 	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
@@ -181,33 +148,6 @@ func TestUsageLedgerRoutes(t *testing.T) {
 		t.Fatalf("past the end: %+v", l)
 	}
 
-	export := func() (string, int) {
-		t.Helper()
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/usage/requests/export?period=today&agent=codex", strings.NewReader("{}")))
-		var out struct {
-			Path string
-			Rows int
-		}
-		if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != 200 || err != nil {
-			t.Fatalf("export: %d %s", w.Code, w.Body)
-		}
-		return out.Path, out.Rows
-	}
-	p1, n := export()
-	p2, _ := export()
-	day := now.Format("2006-01-02")
-	if n != 2 || p1 != filepath.Join("~", "Downloads", "magpie-requests-today-"+day+".csv") || p2 != filepath.Join("~", "Downloads", "magpie-requests-today-"+day+"-2.csv") {
-		t.Fatalf("export: %s %s %d", p1, p2, n)
-	}
-	b, err := os.ReadFile(filepath.Join(home, "Downloads", "magpie-requests-today-"+day+".csv"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	if len(lines) != 3 || !strings.HasPrefix(lines[0], "time,agent,requested_model,") || !strings.Contains(lines[2], ",sol,relay,,gpt-6-sol,gpt-6-luna,true,") {
-		t.Fatalf("csv:\n%s", b)
-	}
 }
 
 // What was said in a request comes from the agent's session file when the
@@ -318,26 +258,6 @@ func TestLedgerNamesModelAtProvider(t *testing.T) {
 	}
 }
 
-func TestCSVStamp(t *testing.T) {
-	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
-	for _, day := range []string{"", "2026-02-30", "../../other", "2026-09-30\""} {
-		want := "magpie-requests-7d-2026-09-30"
-		if got := csvStamp(usage.Period("7d"), day, now); got != want {
-			t.Fatalf("%q: %s", day, got)
-		}
-	}
-	// a rolling window's name has no colon, which Windows refuses (#2075)
-	p, _ := usage.LastOf(24 * time.Hour)
-	if got := csvStamp(p, "", now); strings.ContainsAny(got, `:/\\`) {
-		t.Errorf("rolling window: %s", got)
-	}
-	// nor has a range whose ends name their minutes
-	r, _ := usage.RangeOf("2026-09-29T09:30", "2026-09-30T18:00")
-	if got := csvStamp(r, "", now); got != "magpie-requests-2026-09-29T0930-to-2026-09-30T1800" {
-		t.Errorf("range of minutes: %s", got)
-	}
-}
-
 // midnightUsageClock sets usage.Clock to read a tenth of a second before
 // midnight the first time and a tenth of a second after it from then on, as
 // when midnight falls while an answer is worked out. It is set again for
@@ -353,40 +273,6 @@ func midnightUsageClock(t *testing.T, midnight time.Time) {
 		return midnight.Add(-100 * time.Millisecond)
 	}
 	t.Cleanup(func() { usage.Clock = old })
-}
-
-// A period's CSV asked for as midnight falls is named for the day of the
-// calls in it, downloaded or saved to Downloads: its rows and its name are
-// read at one moment, not the rows of one day under the next day's name.
-func TestUsageCSVAtMidnight(t *testing.T) {
-	home := sandboxHome(t)
-	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	midnight := time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
-	usage.Append(usage.Record{Time: midnight.Add(-time.Minute), Agent: "codex", Provider: "relay", Model: "m", Input: 10, Output: 1, Status: 200})
-	mux := http.NewServeMux()
-	usageRoutes(mux, folderOnly{})
-	want := "magpie-requests-today-2026-09-30.csv"
-
-	midnightUsageClock(t, midnight)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage/requests.csv?period=today", nil))
-	rows, err := csv.NewReader(w.Body).ReadAll()
-	if got := w.Header().Get("Content-Disposition"); w.Code != 200 || err != nil || len(rows) != 2 || got != `attachment; filename="`+want+`"` {
-		t.Errorf("download: %d, %s with %d rows (%v), want %s with 2", w.Code, got, len(rows), err, want)
-	}
-
-	midnightUsageClock(t, midnight)
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/usage/requests/export?period=today", nil))
-	var out struct {
-		Path string
-		Rows int
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != 200 || err != nil || out.Rows != 1 || out.Path != filepath.Join("~", "Downloads", want) {
-		t.Errorf("export: %d %s, want %s with 1 row", w.Code, w.Body, want)
-	}
 }
 
 // GET /api/usage/heatmap (#1369): the last 53 weeks a day each, of the

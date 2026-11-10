@@ -181,9 +181,7 @@ func TestGatewayModeListsNoOwnSessions(t *testing.T) {
 	if b := ok("GET", "/api/sessions/transcript?agent=pi&id="+remote, ""); !strings.Contains(b, "rename foo") {
 		t.Fatalf("gateway mode: the gateway's transcript: %s", b)
 	}
-	if b := ok("GET", "/api/sessions/markdown?agent=pi&id="+remote, ""); !strings.Contains(b, "rename foo") {
-		t.Fatalf("gateway mode: the gateway's Markdown: %s", b)
-	}
+
 	ownLeft("search", ok("GET", "/api/sessions/search?agent=claude&q=secret", ""))
 	if b := ok("GET", "/api/sessions/search?agent=pi&q=remotely", ""); !strings.Contains(b, remote) {
 		t.Fatalf("gateway mode: search leaves out the gateway's session: %s", b)

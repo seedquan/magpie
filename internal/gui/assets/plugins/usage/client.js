@@ -70,7 +70,6 @@ magpie.plugin("usage", (ctx) => {
       <span id="ledRoute" hidden><span id="ledRouteLabel"></span><button class="text" id="ledRouteClear" type="button" data-tt="Clear filter" aria-label="Clear filter">×</button></span>
       <span class="grow"></span>
       <input class="sess-filter" id="ledQ" type="search" spellcheck="false" autocomplete="off" placeholder="Search models, providers, sessions" data-tp>
-      <button class="text" id="ledExport" type="button" title="Save every request listed, all pages, as a CSV file in Downloads" data-tt><span data-t>Export CSV</span></button>
     </div>
     <p class="usage-note" id="ledScope" data-t>Gateway and session-log calls; local rejections excluded from totals.</p>
     <div class="led-dash" id="ledDash" hidden>
@@ -99,12 +98,11 @@ magpie.plugin("usage", (ctx) => {
       <div class="heat-foot"></div>
       <div class="heat-tip" id="ledHeatTip" hidden></div>
     </section>
-    <div class="led-head"><p class="led-sum" id="ledSum"></p><span class="grow"></span><span class="led-arch" id="ledArchive"></span></div>
     <div class="led-strip led-vias" id="ledVia" hidden></div>
+    <div class="led-head"><p class="led-sum" id="ledSum"></p></div>
     <div class="led-wrap" id="ledWrap"></div>
-            <div class="led-hscroll" id="ledHScroll" hidden><div></div></div>
+    <div class="led-hscroll" id="ledHScroll" hidden><div></div></div>
     <div class="led-pager" id="ledPager" hidden></div>
-    <p class="usage-note" id="ledNote"></p>
   </div>
   <div class="usage-pane led-req" id="ledReqPane" hidden></div>
   <div class="usage-pane ctx-pane" id="contextPane" hidden></div>

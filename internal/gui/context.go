@@ -1069,11 +1069,8 @@ func contextRoutesAPI(mux *http.ServeMux) {
 			pt, ok = gw.PromptText(id, q.Get("kind"), item >= 0)
 		}
 		if !ok {
-			// gone from memory: the request archive's copy, when it
-			// kept one (context_archive.go)
-			if pt, ok = archivedPromptText(rw, r, id, q.Get("kind"), item >= 0); !ok {
-				return
-			}
+			writeGone(rw, "off")
+			return
 		}
 		if item >= 0 {
 			// the one item's text; the rest by name and size only

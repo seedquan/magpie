@@ -173,43 +173,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
 
-      await t.test(`${lang}: the sync form's Usage tick`, async () => {
-        const posts = [];
-        const { p, errors } = await open("http://magpie.test/", { width: 900, height: 420 }, false, [], [], posts);
-        await p.locator("#prefs").click();
-        await reader.openPart(p, "sync");
-        const first = p.locator("#syncList .row.pref").first();
-        await first.waitFor({ state: "visible" });
-        const toEnd = async () => {
-          await p.mouse.move(450, 300);
-          const left = () => p.locator("#view-settings").evaluate((v) => v.scrollHeight - v.clientHeight - v.scrollTop);
-          for (let i = 0; i < 120 && (await left()) > 0.5; i++) { await p.mouse.wheel(0, 80); await p.waitForTimeout(15); }
-          await p.waitForTimeout(300);
-        };
-        await toEnd();
-        await first.locator(".val button").click();
-        const form = p.locator("#syncList .sync-form");
-        await form.waitFor({ state: "visible" });
-        await form.locator(":scope > div").nth(1).locator("input").fill("https://dav.example.com/dav/");
-        const box = (label) => form.locator(":scope > label:visible", { hasText: new RegExp("^" + label + "$") }).locator("xpath=following-sibling::div[1]").locator("input");
-        await box(lang === "zh" ? "口令" : "Passphrase").fill("correct horse");
-        await toEnd();
-        const tick = form.locator("label.tick", { hasText: w.tick });
-        // Back up by itself's rows under the form put the tick, at the
-        // page's end, under Settings' held tabs: bring it into the open
-        await tick.evaluate((e) => e.scrollIntoView({ block: "center" }));
-        assert.equal(await tick.locator("input").isChecked(), false, "off unless picked");
-        const top = () => p.locator("#view-settings").evaluate((v) => v.scrollTop);
-        const at = await top();
-        await tick.click();
-        await p.waitForTimeout(200);
-        assert.equal(await top(), at, "the tick moved the page");
-        await form.locator(".bar .primary").click();
-        await form.waitFor({ state: "detached" });
-        assert.equal(posts.length, 1);
-        assert.equal(posts[0].usage, true);
-        assert.deepEqual(errors, []);
-      });
+
     }
   });
 }

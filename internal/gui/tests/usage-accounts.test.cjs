@@ -116,9 +116,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(requests.at(-1).get("offset"), "0");
       assert.equal((await page.locator("#ledAccount").textContent()).trim(), "b@example.com");
       assert.equal(await page.locator(view).evaluate((v) => v.scrollTop), was, "picking an account must not move the page");
-      await page.locator("#ledExport").click();
-      await page.waitForFunction(() => document.querySelector("#status").textContent.includes("accounts.csv"));
-      assert.equal(requests.findLast((q) => q.method === "POST").get("account"), "b@example.com");
+      assert.equal(await page.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
       await page.locator("#ledAccount").click();
       await page.locator(".sess-menu .pm-item", { hasText: w.all }).click();
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 40);

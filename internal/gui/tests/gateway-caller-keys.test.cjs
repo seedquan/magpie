@@ -68,9 +68,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
       await page.waitForFunction(() => document.querySelectorAll("#ledWrap tbody tr").length === 1);
       assert.match(await page.locator("#ledWrap").textContent(), /Laptop/);
-      await page.locator("#ledExport").click();
-      await page.waitForTimeout(150);
-      assert(events.some((e) => e.action === "export" && e.query.includes("callerKey=laptop") && !e.query.includes("key=") && !e.query.includes("user=")));
+      assert.equal(await page.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
       await page.reload();
       await page.locator("#prefs").click();
       await openPart(page, "network");

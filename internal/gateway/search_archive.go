@@ -50,7 +50,7 @@ type searchWire struct {
 // alone). A body is kept up to the archive's size (RequestArchiveMaxMB),
 // and at least what Recent calls keeps.
 func withSearchWire(ctx context.Context, key string) (context.Context, *searchWire) {
-	w := &searchWire{limit: int(max(archiveLimit(), callBodyLimit)) + 1, secret: key}
+	w := &searchWire{limit: callBodyLimit + 1, secret: key}
 	return context.WithValue(ctx, searchWireKey{}, w), w
 }
 

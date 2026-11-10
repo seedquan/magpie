@@ -1,9 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Privacy has a switch for the agents, providers and models the daily
-// event names, on until turned off, below Count me as a user, and gone
-// while that is off: it rides on that event. Turning it off saves
-// noUsageStats, and a save of another setting keeps it.
-// English and Chinese; no backend, the API is faked here.
+// This fork offers no way to enable third-party usage telemetry.
+// Legacy opt-in preferences must not restore its controls in any language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -34,70 +31,37 @@ function serve(lang, settings, saved) {
   };
 }
 
-const words = {
-  en: { count: "Count me as a user", share: "Share the agents, providers and models I use", personal: "Mask personal data", on: "On", off: "Off" },
-  zh: { count: "计入用户数", share: "分享我用的 agent、provider 和模型", personal: "脱敏个人信息", on: "开启", off: "关闭" },
-};
-
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
-    const w = words[lang];
-    test(`${engine} ${lang}: Privacy switches off sharing what magpie is used with`, async (t) => {
-      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
-      t.after(() => browser.close());
-      const errors = [];
-      const settings = { theme: "light", lang, tray: "panel", currency: "usd" }, saved = [];
-      const context = await browser.newContext({ viewport: { width: 900, height: 760 }, reducedMotion: "reduce" });
-      const page = await context.newPage();
-      page.setDefaultTimeout(5000);
-      page.setDefaultNavigationTimeout(60000);
-      page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", serve(lang, settings, saved));
-      await watchSettingsReads(page);
-      await page.goto("http://magpie.test/?view=settings&tab=privacy");
-      await settingsDrawn(page); // rows found are the ones that stay (#1659)
-      const row = (name) => page.locator("#setPage-privacy .list .row", { has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
-      const isOn = (name) => page.waitForFunction(([name, on]) => [...document.querySelectorAll("#setPage-privacy .list .row")].some((r) => r.querySelector(".name")?.textContent === name && r.querySelector(".opt.on")?.textContent === on), [name, w.on]);
-      const isOff = (name) => page.waitForFunction(([name, off]) => [...document.querySelectorAll("#setPage-privacy .list .row")].some((r) => r.querySelector(".name")?.textContent === name && r.querySelector(".opt.on")?.textContent === off), [name, w.off]);
-
-      // on by default, right below Count me as a user
-      await isOn(w.share);
-      const names = await page.$$eval("#setPage-privacy .list .row .name", (ns) => ns.map((n) => n.textContent));
-      assert.equal(names.indexOf(w.share), names.indexOf(w.count) + 1, names.join(" | "));
-
-      // below the card, scrolled to with the wheel as a reader does
-      const reveal = async (name) => {
-        await page.mouse.move(450, 300);
-        await row(name).waitFor(); // a save draws the rows again
-        for (let i = 0; i < 40; i++) {
-          const y = (await row(name).boundingBox())?.y ?? 9999;
-          if (y > 60 && y < 600) break;
-          await page.mouse.wheel(0, y > 600 ? 200 : -200);
-          await page.waitForTimeout(80);
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    for (const width of [900, 390]) {
+      test(`${engine} ${lang} ${width}: Privacy cannot enable third-party telemetry`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        t.after(() => browser.close());
+        const errors = [], saved = [];
+        const settings = { requestArchive:true, requestArchiveLocal:true, otel:{enabled:true,sessions:true}, theme: "light", lang, tray: "panel", currency: "usd", noStats: false, noUsageStats: false };
+        const context = await browser.newContext({ viewport: { width, height: 760 }, reducedMotion: "reduce" });
+        const page = await context.newPage();
+        page.setDefaultTimeout(5000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", serve(lang, settings, saved));
+        await watchSettingsReads(page);
+        await page.goto("http://magpie.test/?view=settings&tab=privacy");
+        await settingsDrawn(page);
+        const names = await page.locator("#setPage-privacy .row .name").allTextContents();
+        const words = await page.evaluate(() => ["Count me as a user", "Share the agents, providers and models I use", "Mask personal data"].map((s) => t(s)));
+        assert.ok(!names.includes(words[0]), "daily telemetry can be enabled");
+        assert.ok(!names.includes(words[1]), "usage telemetry can be enabled");
+        assert.ok(names.includes(words[2]), "privacy settings did not render");
+        assert.equal(await page.locator('#setTabs [data-set="sync"], #setTabs [data-set="otel"]').count(), 0);
+        assert.equal(await page.locator('#syncList, #otelList, #archiveList').count(), 0);
+        for (const tab of ["sync", "otel"]) {
+          await page.goto(`http://magpie.test/?view=settings&tab=${tab}`);
+          await settingsDrawn(page);
+          assert.equal(await page.locator('#setPage-privacy:visible').count(), 1, "removed deep link did not retain the last valid section");
         }
-      };
-      await reveal(w.share);
-      await row(w.share).getByRole("button", { name: w.off, exact: true }).click();
-      await isOff(w.share);
-      assert.equal(saved.at(-1).noUsageStats, true, JSON.stringify(saved));
-      assert.ok(!saved.at(-1).noStats);
-
-      // another setting saved keeps it off
-      await reveal(w.personal);
-      await row(w.personal).getByRole("button", { name: w.on, exact: true }).click();
-      await isOn(w.personal);
-      assert.equal(saved.at(-1).noUsageStats, true, JSON.stringify(saved.at(-1)));
-
-      // not counted at all: nothing to share, no switch. With personal data
-      // masked, its kinds' rows put this one below the window: scrolled to
-      // as a reader does, since a script doesn't scroll Settings in WebKit
-      await reveal(w.count);
-      await row(w.count).getByRole("button", { name: w.off, exact: true }).click();
-      await isOff(w.count);
-      await row(w.share).waitFor({ state: "detached" });
-      assert.equal(saved.at(-1).noStats, true);
-      await context.close();
-      assert.deepEqual(errors, []);
-    });
+        assert.deepEqual(errors, []);
+        await context.close();
+      });
+    }
   }
 }

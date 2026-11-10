@@ -24,7 +24,6 @@ const PLUGINS = [
   { id: "groups", name: "Routing groups", sub: "Several models agents pick as one: each request goes to the right one, and to the next when one fails", one: "1 group in use", many: "{n} groups in use" },
   { id: "library", name: "Library", sub: "Instructions, MCP servers, skills and hooks, kept once and given to every agent", one: "1 item given to agents", many: "{n} items given to agents" },
   { id: "middleware", name: "JS gateway plugins", sub: "Run the JavaScript gateway plugins: middleware on agents' requests and replies, routings and usage observers", one: "1 gateway plugin on", many: "{n} gateway plugins on" },
-  { id: "otel", name: "Observability", sub: "Send each request's traces and metrics to an OpenTelemetry collector, such as Langfuse", one: "Sending to a collector", many: "Sending to a collector" },
   { id: "redact", name: "Privacy masking", sub: "Secrets, personal data and your own words go to vendors as placeholders, and come back as they were", one: "Masking is on", many: "Masking is on" },
   { id: "rotation", name: "Routing strategies", sub: "The routings besides Smart: In order, Until used up, In turn, Least used first, Use before expiry, By weight, Free first, Speed first and Cheapest first", one: "1 provider or group routed so", many: "{n} providers and groups routed so" },
   { id: "routing", name: "Routing", sub: "Each request as the gateway routes it, the accounts it weighed and what each answered, and your routing groups", one: "1 group in use", many: "{n} groups in use" },
@@ -158,7 +157,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await viewShown(page), ["view-agents"], `${where}: ?view=sessions`);
         // Settings has no Features tab of its own, and Observability's is off
         assert.equal(await page.locator("#setTab-features").count(), 0, `${where}: no Settings › Features`);
-        assert.ok(await page.locator("#setTab-otel").isHidden(), `${where}: Observability's tab, off`);
+        assert.equal(await page.locator("#setTab-otel").count(), 0, "Observability is removed");
 
         await page.goto("http://magpie.test/?view=plugins");
         await pluginTabs(page, side).first().waitFor();
@@ -245,12 +244,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           }
           assert.equal(await clearOfHead(id), true, `${where}: ${id}'s switch clear of the sticky head`);
         };
-        // and Observability: its Settings tab is back
-        await wheelTo("otel");
-        await outFromUnder("otel");
-        await page.locator('#builtinList [data-id="otel"] [role="switch"]').click();
-        await page.waitForSelector('#builtinList [data-id="otel"] [aria-checked="true"]');
-        assert.ok(await page.locator("#setTab-otel").evaluate((b) => getComputedStyle(b).display !== "none"), `${where}: Observability back`);
         // Routing switched off: its tab and the panel's go, the page stays.
         await wheelTo("routing");
         await outFromUnder("routing");

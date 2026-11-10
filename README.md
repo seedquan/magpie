@@ -1,5 +1,9 @@
 <div align="center">
 
+> Personal privacy fork: third-party usage telemetry, cloud sync, OTLP,
+> request archives, local backup/restore and session/usage file exports are
+> removed. Existing saved data is preserved. See [the fork policy](docs/subsystems/sync-backup.md).
+
 <a href="https://usemagpie.ai"><img src="site/public/img/icon-256.png" width="112" alt="magpie"></a>
 
 # magpie
@@ -262,7 +266,7 @@ Find them under Plugins › Discover › Gateway middleware. See [Gateway middle
 | **Quota** | Balances and quota windows for every key, plan and account (`magpie quota`), and a reminder before a window renews with much of it unused |
 | **Sessions** | Every agent conversation with its cost and title, reopened in your terminal with one click |
 | **Context** | How full each request's context window is, how much came from the cache, and what fills it |
-| **Bills** | By account and by upstream key, and OTLP export to your own observability stack |
+| **Bills** | Local usage views by account and upstream key |
 
 ### Sharing
 
@@ -271,7 +275,7 @@ Find them under Plugins › Discover › Gateway middleware. See [Gateway middle
 | **Local network** | Turn on *Share on local network* and give each client a named gateway key with its own daily, weekly or monthly token and cost limit |
 | **[Remote magpie](https://usemagpie.ai/docs/remote)** | A laptop uses the providers, accounts and groups of the magpie on your desktop, and still wires its own agents |
 | **[Docker](https://usemagpie.ai/docs/docker)** | Run `ghcr.io/yetone/magpie` on a server or a NAS and manage it from the web UI |
-| **Sync** | Back up to a file, or sync machines over WebDAV (Nutstore, Nextcloud…), S3, or an encrypted GitHub repository backup |
+
 
 ### Also
 

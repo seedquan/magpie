@@ -138,7 +138,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (f.strip.top < f.pick.bottom) assert.ok(Math.abs(f.pick.mid - f.strip.mid) <= 1, `${at}: the picker and the strip share a middle: ${JSON.stringify([f.pick, f.strip])}`);
         else assert.ok(Math.abs(f.strip.left - f.pick.left) <= 1, `${at}: a strip under the picker starts at its left`);
         assert.ok(f.hit, `${at}: the picker is taken 5px above and below it`);
-        assert.ok(Math.abs(f.q.mid - f.exp.mid) <= 2 && f.q.right <= f.exp.left, `${at}: the search, then Export CSV, on one line: ${JSON.stringify([f.q, f.exp])}`);
+        assert.ok(f.q, "the search remains available");
+        assert.equal(f.exp, null, "CSV export is removed");
 
         // the menu picks through the strip's own options
         await page.locator("#usageRangeMenu").click();

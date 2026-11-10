@@ -30,7 +30,6 @@ function fixture(lang, { redact = true, otel = true, masks = true, routing = tru
   const builtins = () => [
     row("redact", "Privacy masking", "Secrets, personal data and your own words go to vendors as placeholders, and come back as they were", st.redact,
       { setAt: "privacy #redactList", page: "masking", ...(st.redact ? { inUse: 1, use: "Masking is on" } : {}) }),
-    row("otel", "Observability", "Send each request's trace to an OpenTelemetry collector", st.otel, { setAt: "otel #otelList" }),
     row("library", "Library", "Instructions, MCP servers, skills and hooks, kept once and given to every agent", true, { page: "library" }),
     row("routing", "Routing", "Each request as the gateway routes it", st.routing, {}),
     row("groups", "Routing groups", "Several models agents pick as one", st.groups, { opens: "groups" }),
@@ -129,7 +128,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.deepEqual(await past(featRow(page, "redact")), []);
             if (!link) shots.push([`${lang}-${width}-builtin`, await featRow(page, "redact").screenshot()]);
             // Observability on: its settings; Library: a page and no settings, the page
-            assert.equal((await featRow(page, "otel").locator(".feat-go").textContent()).trim(), w("Settings") + " › " + w("Observability"));
             assert.equal((await featRow(page, "library").locator(".feat-go").textContent()).trim(), w("Library"));
             await line.locator("button.link").nth(link).click();
             if (link) await page.locator("#view-masking #maskCard .msk-head").waitFor();
@@ -170,7 +168,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const line = featRow(page, "redact").locator(".who .feat-go");
           assert.equal((await line.textContent()).trim(), w("Settings") + " › " + w("Privacy"));
           // Observability's settings go with it
-          assert.equal(await featRow(page, "otel").locator(".feat-go").count(), 0);
           await line.locator("button.link").click();
           const off = page.locator("#redactList .row.feat-off");
           await off.waitFor();

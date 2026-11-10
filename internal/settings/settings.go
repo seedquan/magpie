@@ -263,24 +263,12 @@ type Settings struct {
 	Port int `json:"port,omitempty"`
 	// LANKeyID remembers the default named key created when sharing is enabled.
 	LANKeyID string `json:"lanKeyId,omitempty"`
-	// RequestArchive keeps each call the gateway serves — its headers and
-	// bodies both ways, secrets taken out — in the S3 bucket sync keeps
-	// its backup in (gateway/archive.go), for looking into a request later.
-	RequestArchive bool `json:"requestArchive,omitempty"`
-	// RequestArchiveMaxMB is how much of each body the archive keeps, in
-	// MiB: 0 for 32, at most 1024 (#447)
-	RequestArchiveMaxMB int `json:"requestArchiveMaxMB,omitempty"`
-	// RequestArchiveLocal keeps the request archive on this computer's disk,
-	// in magpie's folder (gateway/archive_local.go), while sync has no S3
-	// bucket for it (CyberCaius on Discord). Its own switch, separate from
-	// RequestArchive, which sync carries to every computer: this computer's
-	// own (KeepOwn), so a request body is written to a disk only where the
-	// user turned it on.
-	RequestArchiveLocal bool `json:"requestArchiveLocal,omitempty"`
-	// RequestArchiveLocalMB is how large the archive on this computer grows
-	// before its oldest calls are removed, in MiB: 0 for 1024. In
-	// settings.json only; this computer's own (KeepOwn).
-	RequestArchiveLocalMB int `json:"requestArchiveLocalMB,omitempty"`
+	// Legacy archive fields remain readable for configuration compatibility.
+	// This fork has no local or remote request archive implementation.
+	RequestArchive        bool `json:"requestArchive,omitempty"`
+	RequestArchiveMaxMB   int  `json:"requestArchiveMaxMB,omitempty"`
+	RequestArchiveLocal   bool `json:"requestArchiveLocal,omitempty"`
+	RequestArchiveLocalMB int  `json:"requestArchiveLocalMB,omitempty"`
 	// GatewayConversations is local, opt-in recording of session traffic.
 	// Only SetGatewayConversations changes it; other saves keep local consent.
 	GatewayConversations bool `json:"gatewayConversations,omitempty"`
@@ -476,11 +464,10 @@ type Settings struct {
 	// plugin whose own CLI opens its page (Grok Build on macOS and
 	// Windows) still does: magpie can't stop that.
 	SignInLinkOnly bool `json:"signInLinkOnly,omitempty"`
-	// NoStats stops the one event a day that counts magpie's users (see
-	// internal/stats).
+	// NoStats is retained for compatibility with existing preferences and
+	// backups. This fork disables third-party telemetry unconditionally.
 	NoStats bool `json:"noStats,omitempty"`
-	// NoUsageStats keeps which agents, providers and models magpie is
-	// used with out of that event, which then counts the user only.
+	// NoUsageStats is retained for compatibility; this fork sends no usage events.
 	NoUsageStats bool `json:"noUsageStats,omitempty"`
 	// NoUpdatePill keeps the header's Update pill away when a newer magpie
 	// is out; UpdateSkip is the one version it was hidden for, and a newer

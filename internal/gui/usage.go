@@ -1,20 +1,14 @@
 package gui
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
-	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
@@ -47,22 +41,6 @@ func init() {
 		}
 		return out
 	}
-}
-
-// csvStamp names the selected day, or, when no day is selected, the period
-// and the day of now, the moment its rows were read at.
-func csvStamp(p usage.Period, day string, now time.Time) string {
-	if _, err := time.Parse(time.DateOnly, day); err == nil {
-		return "magpie-requests-day-" + day
-	}
-	if p.IsRange() { // the days picked, which already say when
-		// a minute an end names ("T09:30") without the colon Windows
-		// doesn't take in a file name
-		return "magpie-requests-" + strings.ReplaceAll(strings.Replace(string(p), "..", "-to-", 1), ":", "")
-	}
-	// a rolling window ("last:24h0m0s") without the colon, which Windows
-	// doesn't take in a file name (#2075)
-	return "magpie-requests-" + strings.ReplaceAll(string(p), ":", "-") + "-" + now.Format(time.DateOnly)
 }
 
 // contentJSON is what was said in a request, or why it can't be told.
@@ -214,47 +192,6 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 			at = to
 		}
 		writeJSON(rw, requestContent(q.Get("agent"), q.Get("session"), from, to, at))
-	})
-	// the same CSV to a browser (magpie web), which saves it itself
-	mux.HandleFunc("GET /api/usage/requests.csv", func(rw http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		p := periodOf(q.Get("period"))
-		// one moment for the rows and the day in the file's name, the
-		// reader's day
-		f := ledgerFilter(r)
-		now := usage.Clock().In(f.Zone)
-		rows := usage.LedgerOfAt(p, f, now).Rows
-		rw.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		rw.Header().Set("Content-Disposition", `attachment; filename="`+csvStamp(p, q.Get("day"), now)+`.csv"`)
-		usage.WriteCSV(rw, rows)
-	})
-	// the rows the ledger shows, all its pages, as a CSV in Downloads
-	mux.HandleFunc("POST /api/usage/requests/export", func(rw http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		p := periodOf(q.Get("period"))
-		f := ledgerFilter(r)
-		now := usage.Clock().In(f.Zone)
-		rows := usage.LedgerOfAt(p, f, now).Rows
-		var b bytes.Buffer
-		if err := usage.WriteCSV(&b, rows); err != nil {
-			fail(rw, err)
-			return
-		}
-		dir := downloads()
-		stamp := csvStamp(p, q.Get("day"), now)
-		name := filepath.Join(dir, stamp+".csv")
-		for i := 2; ; i++ { // never over an earlier one
-			if _, err := os.Stat(name); err != nil {
-				break
-			}
-			name = filepath.Join(dir, fmt.Sprintf("%s-%d.csv", stamp, i))
-		}
-		if err := edit.WriteAtomic(name, b.Bytes()); err != nil {
-			fail(rw, err)
-			return
-		}
-		_ = w.OpenFolder(dir) // saved either way; the path is in the answer
-		writeJSON(rw, map[string]any{"path": tilde(name), "rows": len(rows)})
 	})
 	// The subscriptions' quotas, the plans' bought with a key, and the
 	// keys' balances come from the
