@@ -39,8 +39,7 @@ func midnightUsageClock(t *testing.T, midnight time.Time) {
 	t.Cleanup(func() { stats.Clock = old })
 }
 
-// magpie usage --csv writes the period's requests, newest first, one row
-// each, with the model asked for, sent and served.
+// The local usage summary names upstream provider keys without exposing them.
 func TestUsageProviderKeys(t *testing.T) {
 	groupsHome(t)
 	id := provider.KeyID("fixture-provider-secret")
