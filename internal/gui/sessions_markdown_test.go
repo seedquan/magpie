@@ -45,7 +45,7 @@ func TestEmptySessionOpens(t *testing.T) {
 	if w := get("/api/sessions/transcript?agent=codex&id=" + id); w.Code != 200 || strings.Contains(w.Body.String(), "no such session") {
 		t.Fatalf("conversation: %d %s", w.Code, w.Body)
 	}
-	if w := get("/api/sessions/markdown?agent=codex&id=" + id); w.Code != 200 {
-		t.Fatalf("markdown: %d %s", w.Code, w.Body)
+	if w := get("/api/sessions/markdown?agent=codex&id=" + id); w.Code != http.StatusNotFound && w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("removed Markdown export remains reachable: %d %s", w.Code, w.Body)
 	}
 }
