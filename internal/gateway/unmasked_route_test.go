@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -113,18 +112,10 @@ func TestUnmaskedRouteIsNotMasked(t *testing.T) {
 					t.Fatalf("the observer was handed %+v", got)
 				}
 			}
-			if tc.archived {
-				archivePending.Wait()
-				var a Archived
-				if err := json.Unmarshal(bucket.objs["archive/"+c.Archive+".json"], &a); err != nil {
-					t.Fatalf("%v: %v", keys(bucket.objs), err)
-				}
-				// as it went: masked, or as written save the secrets every
-				// archived body has taken out
-				if masked := strings.Contains(a.Request.Body, placeholder); masked == tc.whole || a.Request.Body == "" || strings.Contains(a.Request.Body, key) {
-					t.Fatalf("the archive kept %s", a.Request.Body)
-				}
+			if len(bucket.objs) != 0 || c.Archive != "" {
+				t.Fatal("legacy archive setting exported a request")
 			}
+
 			n.Store(0)
 			f.reply = `{"input_tokens":17}`
 			if code, reply := post(t, "/v1/messages/count_tokens", count); code != 200 {

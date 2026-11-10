@@ -316,7 +316,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await lastAsked(page, asked, (q) => q.get("q") === "nothing-like-it");
         await page.locator(".led-none").waitFor();
         assert.equal(await page.locator(".led-none").textContent(), w.none);
-        assert(await page.locator("#ledExport").isDisabled(), "nothing to export");
+        assert.equal(await page.locator("#ledExport").count(), 0);
         await page.locator("#ledQ").press("Escape");
         await lastAsked(page, asked, (q) => !q.has("q") && q.get("agent") === "claude");
         await click(page, page.locator("#ledAgent"));
@@ -328,14 +328,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await click(page, page.locator("#period .opt").first());
         await lastAsked(page, asked, (q) => q.get("period") === "today" && q.get("offset") === "0");
 
-        // Export CSV posts the filters shown, no page, and says where it went
-        await click(page, page.locator("#ledExport"));
-        await lastAsked(page, asked, (q) => q.method === "POST");
-        const ex = asked.findLast((q) => q.method === "POST"); // a refresh may ask after it
-        assert.equal(ex.get("period"), "today");
-        assert.equal(asked.filter((q) => q.method === "POST").length, 1, "one export");
-        assert(!ex.has("offset") && !ex.has("limit"), "every page is exported");
-        await page.waitForFunction((s) => document.querySelector("#status").textContent === s, w.saved);
+      assert.equal(await page.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
         assert.deepEqual(errors, []);
       });
 
@@ -380,9 +373,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction((left) => { const v = document.querySelector("#view-usage");
           return v.scrollTop === Math.min(left, v.scrollHeight - v.clientHeight); }, left)
           .catch(async () => assert.fail(`return keeps the Usage view position: left at ${left}, back at ${await scrolled(page)}, room ${await page.locator("#view-usage").evaluate((v) => v.scrollHeight - v.clientHeight)}`));
-        await wheelTo(page, page.locator("#ledExport"));
-        await page.locator("#ledExport").click();
-        await lastAsked(page, asked, (q) => q.method === "POST" && q.get("route") === "123");
         await page.locator("#ledRouteClear").click();
         await lastAsked(page, asked, (q) => !q.has("route") && q.get("period") === originalPeriod);
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 100);
@@ -409,8 +399,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#ledKey").click();
         await page.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
         await lastAsked(page, asked, q=>q.get("route") === "123" && q.get("callerKey") === "laptop");
-        await page.locator("#ledExport").click();
-        await lastAsked(page, asked, q=>q.method === "POST" && q.get("route") === "123" && q.get("callerKey") === "laptop" && !q.has("offset") && !q.has("limit"));
         await page.locator("#ledRouteClear").click();
         await lastAsked(page, asked, q=>!q.has("route") && q.get("period") === "7d" && q.get("agent") === "codex" && q.get("callerKey") === "server" && q.get("failed") === "1" && q.get("q") === "sol" && q.get("offset") === "100");
         assert.equal(await page.locator("#ledQ").inputValue(), "sol");

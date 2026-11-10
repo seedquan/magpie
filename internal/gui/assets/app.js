@@ -4427,9 +4427,7 @@ async function load(again) {
     if (view === "usage") await magpie.call("usage", "refresh", again);
     // the Masking page names agents and providers from what came back
     if (view === "masking") await magpie.call("masking", "refresh", again);
-    // so is an open sync form (WebDAV, export, import): its passwords are
-    // never sent back, so a rebuild would empty it
-    if (view === "settings" && !syncOpen) await loadSettings();
+    if (view === "settings") await loadSettings();
   } catch (e) {
     statusErr(e);
   }
@@ -6074,7 +6072,6 @@ async function loadProvidersNow() {
   // under Routing: drawn when opened (#4652)
   } else if (rtView(view)) { providersBehind = true; markNewPartners(); }
   else renderProviders();
-  renderArchive();
   providersWhileFetching();
   if (view === "providers") loadUpstream();
   discoverLocalProviders();
@@ -7126,51 +7123,6 @@ function modelInfo(m) {
   return box;
 }
 
-// The request archive: each call, secrets out, kept in sync's S3 bucket or
-// else a folder here (gateway/archive*.go), read back by its Usage row. Its
-// switch is over that list (Jorben); where it keeps is its tooltip, a failed
-// save is beside it. It is changed in place, never swapped out mid-press.
-let archiveSaving = false;
-function renderArchive() {
-  const box = $("#ledArchive");
-  if (!box) return;
-  // not said Off before the gateway's state is in
-  box.hidden = !providers?.gateway;
-  if (box.hidden) return;
-  const a = providers.gateway.archive || {};
-  let b = box.querySelector(".led-arch-sw");
-  if (!b) {
-    b = el("button", "led-arch-sw");
-    b.type = "button";
-    b.setAttribute("role", "switch");
-    const sw = el("span", "lib-switch");
-    sw.append(el("i"));
-    b.append(el("span", "led-arch-name"), sw);
-    b.onclick = () => {
-      if (archiveSaving) return;
-      archiveSaving = true;
-      renderArchive();
-      api("settings/archive", { on: !providers.gateway.archive?.on })
-        .then((na) => { providers.gateway.archive = na; })
-        .catch(statusTErr)
-        .finally(() => { archiveSaving = false; renderArchive(); });
-    };
-    box.append(b);
-  }
-  b.classList.toggle("on", !!a.on);
-  b.querySelector(".lib-switch").classList.toggle("on", !!a.on);
-  b.setAttribute("aria-checked", a.on ? "true" : "false");
-  b.disabled = archiveSaving;
-  b.querySelector(".led-arch-name").textContent = t("Request archive");
-  b.title = a.bucket ? t("Keeps each call’s headers and bodies, secrets taken out, in {where}", { where: a.bucket })
-    : t("Keeps each call’s headers and bodies, secrets taken out, on this computer in {where}, the oldest removed past {size}", { where: a.folder || "", size: fmtBytes(a.cap || 0) });
-  let err = box.querySelector(".led-arch-err");
-  if (a.on && a.error) {
-    if (!err) { err = el("span", "led-arch-err"); box.prepend(err); }
-    err.textContent = t(a.bucket ? "Upload failed" : "Not saved");
-    err.title = t(a.bucket ? "Last upload failed: {e}" : "Last save failed: {e}", { e: a.error });
-  } else err?.remove();
-}
 
 // An agent's model field, and whether any of its options come from provider p.
 function modelField(a) {
@@ -7550,11 +7502,8 @@ function partnerNote(pr) {
   return n.en || "";
 }
 
-// countPartner counts what for partners (provider.CountPartner): magpie
-// counts them only when the stats are on, and nothing waits on it
-function countPartner(what, ids) {
-  if (ids.length) api("partner", { what, ids }).catch(() => {});
-}
+// Partner interaction telemetry is disabled in this fork.
+function countPartner(what, ids) {}
 
 // a partner listed since the add sheet last showed the partners puts a
 // small dot on the add button, its name in the button's title, until the
@@ -19722,7 +19671,7 @@ function tabKeys(tabs, sel) {
 // Settings: a tab per part (#471), kept in the address (?tab=privacy) and
 // remembered; a part with no row here has none. A click leaves the page
 // where it is; picked in the sidebar, a part opens at its top (navSubs).
-const SET_TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "plugins", "about"];
+const SET_TABS = ["general", "usage", "network", "models", "privacy", "plugins", "about"];
 let setTab = "general";
 try { const k = localStorage.getItem("magpie.settingsTab"); if (SET_TABS.includes(k)) setTab = k; } catch {}
 let setShown = setTab; // the part shown: the one picked, or the first there
@@ -19977,6 +19926,9 @@ function renderUpdateMirror(r, s) {
 }
 
 function renderSettings() {
+  const folder = $("#dataFolderList");
+  if (window.dataFolderFill) dataFolderFill(folder);
+  else import("./datafolder.js").then(() => dataFolderFill(folder), () => {});
   const s = prefs;
   const keep = prefsKeep(s);
   prefsBase = keep;
@@ -20080,14 +20032,12 @@ function renderSettings() {
   renderRedact(s, keep);
   renderDiscovery(s, keep);
   renderSessionReads(s);
-  renderOTel(s, keep);
   renderPort(s);
   renderBareIds(s);
   renderLAN(s);
   renderAllow(s);
   renderMTLS(s);
   renderCORS(s);
-  renderSync();
 
   const about = $("#about");
   about.replaceChildren();
@@ -20248,170 +20198,6 @@ function renderLangPick(s, keep) {
       savePrefs({ ...keep, lang: v });
     }, "Language", "sess-menu", "right");
   };
-}
-
-// renderSync: the Settings page's sync and backup — a remote keeping the
-// setup the same on every computer, and a sealed file to carry by hand.
-// One of the three opens a form below its row at a time.
-let syncOpen = ""; // "dav" | "export" | "import"
-const syncNames = { webdav: "WebDAV", s3: "S3", github: "GitHub" };
-function syncServers(v) {
-  const servers = { ...v.servers };
-  if (v.other) servers[v.other.kind] ||= v.other;
-  return servers;
-}
-let syncView = null;
-async function renderSync(v) {
-  const box = $("#syncList");
-  if (v) syncView = v;
-  else if (!syncView) {
-    syncView = await api("davsync").catch(() => ({}));
-  }
-  v = syncView;
-  box.replaceChildren();
-  const row = (name, sub, ...tools) => {
-    const r = el("div", "row pref");
-    const who = el("div", "who");
-    who.append(el("div", "name", name));
-    const s = el("div", "sub", sub);
-    who.append(s);
-    const val = el("div", "val");
-    val.append(...tools);
-    r.append(who, val);
-    box.append(r);
-    return s;
-  };
-  const btn = (label, fn, cls = "text") => { const b = el("button", cls, label); b.onclick = fn; return b; };
-  const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
-  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
-
-  // off: what it would keep the same, from the view's toggles (none: all on)
-  const goes = ["settings", "profiles"];
-  if (v.agents !== false) goes.push("agents");
-  if (v.library !== false) goes.push("library");
-  if (v.usage) goes.push("usage");
-  if (v.signIns) goes.push("signins");
-  let line = t("Keeps {parts} the same on every computer", {
-    parts: t(v.keys === false ? "providers without their API keys" : "providers with their API keys") + t(", ") + parts(goes) });
-  const s3 = v.on && v.kind === "s3";
-  const github = v.on && v.kind === "github";
-  if (v.on) {
-    const hostOf = (u) => { try { return new URL(u).host; } catch { return u; } };
-    // a bucket is named by its address, and the server it is on unless AWS
-    const host = github ? [v.url, v.branch].filter(Boolean).join(" · ")
-      : s3 ? [v.url, v.endpoint && hostOf(v.endpoint.includes("://") ? v.endpoint : "https://" + v.endpoint)].filter(Boolean).join(" · ") : hostOf(v.url);
-    line = v.error ? t("Couldn't sync: {error}", { error: v.serverFile ? serverFileSaid(v.serverFile) : t(v.error) })
-      : v.last ? t("Synced {when} · {host}", { when: syncWhen(v.last), host }) : t("Not synced yet · {host}", { host });
-    // the other kind's server, kept from before sync moved here
-    for (const kind of Object.keys(syncServers(v))) line += " · " + t("{kind} settings kept", { kind: syncNames[kind] });
-    if (v.auto === 0) line += " · " + t("only when asked");
-  }
-  const sub = row(t(github ? "GitHub sync" : s3 ? "S3 sync" : v.on ? "WebDAV sync" : "WebDAV, S3 or GitHub sync"), line, ...(v.on
-    ? [btn(t("Sync now"), async (e) => { e.target.classList.add("busy"); renderSync(await api("davsync/now", {}).catch((x) => ({ ...v, error: x.message }))); }),
-       btn(t(syncOpen === "dav" ? "Close" : "Edit"), toggle("dav"))]
-    : [btn(t(syncOpen === "dav" ? "Close" : "Set up"), toggle("dav"))]));
-  if (v.error) sub.classList.add("bad", "wraps");
-  if (v.on) sub.classList.add("say");
-  // usage not shared: its own red line (#1259)
-  if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
-  // subscriptions synced with no account here (悠悠哥 on Discord)
-  // with sign-ins synced, it is one no other computer shared
-  if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", v.signIns
-    ? t("Your synced settings use {names}, which isn't signed in on this computer, and no other computer synced its sign-in. To use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })
-    : t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
-  if (v.on && v.error && v.serverFile?.replace) {
-    row(t("Upload this computer's setup"), t("It replaces the file on the server. That file is kept in the sync folder first."),
-      btn(t("Upload…"), () => syncFile("askUpload", v.serverFile)));
-  }
-  // agent fields set back here after a sync changed them (hayden4608)
-  if (v.on && v.agents !== false && v.own?.length) {
-    const fields = v.own.map((f) => t("{agent} {field}", { agent: f.agent, field: t(f.field) })).join(t(", "));
-    row(t("Kept on this computer"), t("{fields}: set back here after a sync changed them, so they stay as picked here.", { fields }),
-      btn(t("Follow the others"), async (e) => {
-        e.target.classList.add("busy");
-        renderSync(await api("davsync/follow", {}).catch((x) => ({ ...v, error: x.message })));
-        refreshAfterSync();
-      })).classList.add("wraps", "sync-own");
-  }
-  if (v.notice) {
-    const n = v.notice, r = el("div", "row pref sync-note");
-    const lines = [];
-    if (n.restored) lines.push(t("Restored from the server: {parts}", { parts: parts(n.here || []) }));
-    else if (n.here?.length && n.followed) lines.push(t("Replaced by the server's, as this computer follows it: {parts}", { parts: parts(n.here) }));
-    else if (n.here?.length) lines.push(t("Replaced here by newer ones from another computer: {parts}", { parts: parts(n.here) }));
-    if (n.there?.length) lines.push(t("Replaced on the server by this computer's newer ones: {parts}", { parts: parts(n.there) }));
-    const who = el("div", "who");
-    for (const l of lines) who.append(el("div", "sub say", l));
-    who.append(el("div", "sub say", t(n.restored ? "This computer's setup from before is kept in the sync folder." : "The copies replaced are kept in the sync folder.")));
-    const val = el("div", "val");
-    if (n.restored && v.undo) val.append(btn(t("Undo"), async (e) => {
-      e.target.classList.add("busy");
-      try { renderSync(await api("davsync/undo", {})); refreshAfterSync(); } catch (x) { e.target.classList.remove("busy"); sub.textContent = x.message; sub.classList.add("bad"); }
-    }));
-    val.append(btn(t("Show"), () => api("davsync/reveal", {}).catch(statusErr)), btn(t("OK"), async () => renderSync(await api("davsync/dismiss", {}))));
-    r.append(who, val);
-    box.append(r);
-  }
-  if (syncOpen === "dav") box.append(syncFile("davForm", v));
-  if (v.on) {
-    // how often it syncs by itself, or never: a free 坚果云 account is
-    // allowed only so many requests (#847)
-    const every = v.auto ?? 3;
-    row(t("Sync by itself"), every ? t("Every {n} minutes while magpie runs", { n: every }) : t("Off: only Sync now syncs"),
-      segs([[0, t("Off")], [3, t("3 min")], [15, t("15 min")], [30, t("30 min")], [60, t("1 hour")]], every, async (m) => {
-        renderSync(await api("davsync/auto", { minutes: m || -1 }).catch((x) => ({ ...v, error: x.message })));
-      }));
-    // following the server (Ramon317317 on X)
-    const follows = !!v.followServer;
-    row(t("This computer"), follows
-      ? t("Takes the server's setup and sends none. A change made here is replaced and kept in the sync folder.")
-      : t("Changes go to the other computers, and theirs come here"),
-      segs([["both", t("Both ways")], ["follow", t("Follows the server")]], follows ? "follow" : "both", async (m) => {
-        if ((m === "follow") === follows) return;
-        renderSync(await api("davsync/follow-server", { on: m === "follow" }).catch((x) => ({ ...v, error: x.message })));
-        refreshAfterSync();
-      })).classList.add("wraps", "sync-follows");
-    row(t("Restore from the server"), t("This computer's setup becomes the one on the server. What is here now is kept first, to undo."),
-      btn(t("Restore…"), () => syncFile("askRestore", v, parts)));
-  }
-
-  // export and import
-  row(t("Export"), t("Everything above in one file, sealed with a passphrase, to carry to another computer"), btn(t(syncOpen === "export" ? "Close" : "Export…"), toggle("export")));
-  if (syncOpen === "export") box.append(syncFile("exportForm"));
-  row(t("Import"), t("Bring in a file exported from magpie"), btn(t(syncOpen === "import" ? "Close" : "Import…"), toggle("import")));
-  if (syncOpen === "import") box.append(syncFile("importForm"));
-  // Back up by itself (jwaitq), in autobackup.js
-  const ab = box.appendChild(el("div"));
-  if (window.autoBackupFill) autoBackupFill(ab); else import("./autobackup.js").then(() => autoBackupFill(ab), () => {});
-}
-
-// syncFile draws the server's, Export's or Import's form, or asks before a
-// Restore or Upload, from syncfiles.js once loaded
-function syncFile(f, v, ...more) {
-  if (window[f]) return window[f](v, ...more);
-  if (f.startsWith("ask")) return import("./syncfiles.js").then(() => window[f](v, ...more), statusErr);
-  const at = el("div");
-  import("./syncfiles.js").then(() => at.replaceWith(window[f](v)), () => {});
-  return at;
-}
-
-// serverFileSaid: what the server holds where the backup should be, in the
-// reader's language, from what davsync told of it (never its contents).
-function serverFileSaid(f) {
-  const size = fmtBytes(f.size || 0);
-  switch (f.what) {
-    case "empty": return t("the file on the server is empty (0 bytes)");
-    case "cut": return t("the file on the server is a magpie backup cut short ({size}): a write to it was interrupted", { size });
-    case "page": {
-      let s = f.title ? t("the server answered with a web page (“{title}”) instead of the file", { title: f.title }) : t("the server answered with a web page instead of the file");
-      if (f.moved) s += t(", after a redirect to {where}", { where: f.moved });
-      return s + t(": check the address is the server's WebDAV address, not its website");
-    }
-    case "xml": return t("the server answered with an XML document instead of the file: check the address is the server's WebDAV address");
-    case "format": return t("the file on the server is another app's (“{format}”), not a magpie backup", { format: f.format });
-    case "json": return t("the file on the server is a JSON file that isn't a magpie backup ({size})", { size });
-  }
-  return t("the file on the server isn't a magpie backup: it is {type} ({size})", { type: f.type || "?", size });
 }
 
 // refreshAfterSync: what a sync or an import brought in reaches the other
@@ -21898,11 +21684,6 @@ function renderRedact(s, keep) {
   // the pages' Hide accounts, here too, where privacy is looked for
   if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on every page are blurred, for a screenshot to share"),
     onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
-  rowIn(share, t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system"),
-    onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
-  // rides on that event: nothing goes without it
-  if (!s.noStats) rowIn(share, t("Share the agents, providers and models I use"), t("Sent with that event, by magpie's own ids, with how many of each, and how often each partner was shown, opened and added; a provider you added yourself is only “custom”. No names, addresses, accounts, keys or usage"),
-    onOff(!s.noUsageStats, (on) => savePrefs({ ...keep, noUsageStats: !on })));
   // what masking did is a page of its own, Insights › Masking
   if (!featureHides($('#nav button[data-view="masking"]'))) {
     const open = el("button", "", t("Open"));

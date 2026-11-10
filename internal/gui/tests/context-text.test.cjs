@@ -251,17 +251,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await view.locator(".ehead b").innerText(), new RegExp(w.tools));
         await close();
 
-        // an older request's text from the archive, its reply too, cut short
-        const old = { id: 31, time: ago(60 * 30) };
-        await page.evaluate((r) => window.openCtxText(r, "tools"), old);
-        await view.locator(".ctx-vi-head", { hasText: "exec_command" }).waitFor();
-        assert.match(await view.locator(".ctx-view-note").innerText(), new RegExp(w.archive));
-        await replyBtn().click();
-        await view.locator(".ctx-text", { hasText: "Ported" }).waitFor();
-        assert.equal(await view.locator(".ctx-view-note").count(), 2, "the reply says it is read from the archive, and cut short");
-        assert.match(await view.locator(".ctx-view-note").first().innerText(), new RegExp(w.archive));
-        await close();
-
         // a request whose text is no longer kept says so, its reply too
         await page.evaluate(() => window.openCtxText({ id: 30, time: new Date().toISOString() }, "tools"));
         await view.locator(".ctx-view-gone").waitFor();
@@ -269,14 +258,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await replyBtn().click();
         await view.locator(".ctx-view-gone").waitFor();
         assert.match(await view.locator(".ctx-view-gone").innerText(), /10/);
-        await close();
-
-        // one the archive named and doesn't have says the archive lost it
-        await page.evaluate(() => window.openCtxText({ id: 32, time: new Date().toISOString() }, "tools"));
-        await view.locator(".ctx-view-gone").waitFor();
-        const lost = await view.locator(".ctx-view-gone").innerText();
-        assert.match(lost, new RegExp(w.archive));
-        assert.doesNotMatch(lost, /10/);
         await close();
 
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "the page scrolls sideways");

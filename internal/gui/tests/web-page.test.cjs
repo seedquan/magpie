@@ -117,19 +117,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the request archive's switch, over the Usage page's requests
       await page.locator('[data-view="usage"]').first().click();
       await page.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
-      const sw = page.locator("#ledArchive .led-arch-sw");
-      await sw.waitFor();
-      assert.equal(await sw.textContent(), w.name);
-      assert.equal(await sw.getAttribute("aria-checked"), "false");
-      const y = () => page.locator("#view-usage").evaluate((v) => v.scrollTop);
-      await sw.scrollIntoViewIfNeeded();
-      const before = await y();
-      await sw.click();
-      for (let i = 0; i < 50 && !seen.archive.length; i++) await page.waitForTimeout(40);
-      assert.deepEqual(seen.archive, [{ on: true }]);
-      await page.locator('#ledArchive .led-arch-sw[aria-checked="true"]').waitFor();
-      assert.equal(await y(), before, "the click moved the page");
-
+      assert.equal(await page.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
       // the Usage page's chart, its ranking by provider with their icons
       await page.locator("#ledRank .rk").first().waitFor();
       await page.locator("#ledSplit").getByText(w.provider, { exact: true }).click();

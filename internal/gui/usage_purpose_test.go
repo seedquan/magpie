@@ -1,15 +1,10 @@
 package gui
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,10 +12,7 @@ import (
 )
 
 func TestUsagePurposeRoutes(t *testing.T) {
-	home := sandboxHome(t)
-	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	sandboxHome(t)
 	start := usage.Today.Since(holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))).Add(time.Second)
 	for i, kind := range []string{"thread_title", "thread_title_reconsideration", "review", "", "future_kind", "title_generation"} {
 		usage.Append(usage.Record{Time: start.Add(time.Duration(i) * time.Second), Agent: "codex", Provider: "relay", Model: "m", Kind: kind, Input: 10, Output: 2, Status: 200})
@@ -51,29 +43,5 @@ func TestUsagePurposeRoutes(t *testing.T) {
 	if chartCalls != 3 {
 		t.Fatalf("chart ignored purpose: %d", chartCalls)
 	}
-	csvData := get("GET", "/api/usage/requests.csv").Body.String()
-	rows, err := csv.NewReader(strings.NewReader(csvData)).ReadAll()
-	if err != nil || len(rows) != 4 {
-		t.Fatalf("CSV must contain all filtered pages: %v %s", err, csvData)
-	}
-	col := slices.Index(rows[0], "kind")
-	if col < 0 {
-		t.Fatalf("CSV kind column missing: %v", rows[0])
-	}
-	for _, row := range rows[1:] {
-		if usage.PurposeOf(row[col]) != "kind:thread_title" {
-			t.Fatalf("CSV contains another purpose: %v", row)
-		}
-	}
-	var exported struct {
-		Path string
-		Rows int
-	}
-	if err := json.Unmarshal(get("POST", "/api/usage/requests/export").Body.Bytes(), &exported); err != nil || exported.Rows != 3 {
-		t.Fatalf("export: %+v %v", exported, err)
-	}
-	b, err := os.ReadFile(filepath.Join(home, "Downloads", filepath.Base(exported.Path)))
-	if err != nil || string(b) != csvData {
-		t.Fatalf("desktop export differs from filtered download: %v", err)
-	}
+
 }

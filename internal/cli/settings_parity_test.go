@@ -189,12 +189,8 @@ var cliForRoute = map[string]string{
 	"POST /api/settings/search-count":      "magpie search count",
 	"POST /api/settings/update-mirror":     "magpie update mirror",
 	"POST /api/sync":                       "magpie sync",
-	"GET /api/davsync":                     "magpie webdav",
-	"POST /api/backup/export":              "magpie backup",
-	"POST /api/backup/import":              "magpie restore",
 	"GET /api/datafolder":                  "magpie data",
 	"POST /api/datafolder/{action}":        "magpie data move",
-	"POST /api/davsync/{action}":           "magpie webdav",
 	"GET /api/caller-keys":                 "magpie gateway-key list",
 	"POST /api/caller-keys/{action}":       "magpie gateway-key",
 	"GET /api/account-groups":              "magpie gateway-key groups",
@@ -219,7 +215,6 @@ var cliForRoute = map[string]string{
 	"GET /api/usage":                       "magpie usage",
 	"GET /api/usage/quotas":                "magpie quota",
 	"GET /api/usage/quotas/history":        "magpie quota history",
-	"GET /api/usage/requests.csv":          "magpie usage --csv",
 	"POST /api/usage/workbuddy-checkin":    "magpie accounts checkin",
 	"GET /api/update":                      "magpie update check",
 	"POST /api/update/check":               "magpie update check",
@@ -305,12 +300,6 @@ var notYet = map[string]string{
 	"POST /api/usage/arrange":                    W,  // api.go
 	"POST /api/warm-now":                         A,  // api.go
 	"POST /api/window/{action}":                  W,  // api.go
-	"GET /api/autobackup":                        S2, // backup.go: Back up by itself
-	"POST /api/autobackup/{action}":              S2, // backup.go
-	"GET /api/archive":                           S2, // archive.go
-	"GET /api/archive/file":                      S2, // archive.go
-	"POST /api/archive/export":                   S2, // archive.go
-	"POST /api/settings/archive":                 S2, // archive.go
 	"GET /api/web-page":                          W,  // apppage.go
 	"POST /api/web-page":                         W,  // apppage.go
 	"GET /api/plugins/builtin":                   P,  // builtins.go
@@ -441,7 +430,6 @@ var notYet = map[string]string{
 	"POST /api/sessions/recording":               U,  // sessions_manage.go
 	"POST /api/sessions/relocate-claude":         U,  // sessions_manage.go
 	"POST /api/sessions/restore":                 U,  // sessions_manage.go
-	"GET /api/sessions/markdown":                 U,  // sessions.go
 	"GET /api/sessions/one":                      U,  // sessions.go
 	"GET /api/sessions/overview":                 U,  // sessions.go
 	"GET /api/sessions/progress":                 U,  // sessions.go
@@ -449,7 +437,6 @@ var notYet = map[string]string{
 	"GET /api/sessions/transcript":               U,  // sessions.go
 	"POST /api/agents/open":                      W,  // sessions.go
 	"POST /api/sessions/carry":                   U,  // sessions.go
-	"POST /api/sessions/export":                  U,  // sessions.go
 	"POST /api/sessions/terminal":                W,  // sessions.go
 	"GET /api/model-loads":                       U,  // speeds.go
 	"GET /api/model-speeds":                      U,  // speeds.go
@@ -477,7 +464,6 @@ var notYet = map[string]string{
 	"POST /api/usage/plugin-checkin":             U,  // usage.go
 	"POST /api/usage/qoder-checkin":              U,  // usage.go
 	"POST /api/usage/quotas/refresh":             U,  // usage.go
-	"POST /api/usage/requests/export":            U,  // usage.go
 	"POST /api/usage/trae-checkin":               U,  // usage.go
 	"GET /api/update/notes":                      W,  // update.go
 	"GET /api/whatsnew":                          W,  // whatsnew.go

@@ -138,11 +138,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await waitRows(100);
       await click(page, page.locator("#ledStatus .opt").nth(1)); // Failed
       await waitRows(1);
-      await click(page, page.locator("#ledExport"));
-      await page.waitForFunction(() => document.querySelector("#status")?.textContent.includes("purpose.csv"));
-      const exported = asked.findLast((q) => q.method === "POST");
-      assert.equal(exported.get("purpose"), "kind:thread_title");
-      assert.equal(exported.get("failed"), "1");
+      assert.equal(await page.locator("#ledExport, #ledArchive").count(), 0, "data export controls are removed");
       // A route opened from elsewhere clears the purpose temporarily and restores it.
       await page.evaluate(() => window.openUsageRoute({ id: 107, time: new Date().toISOString(), model: "example-model" }));
       await page.locator("#ledRoute").waitFor({ state: "visible" });

@@ -4,6 +4,7 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Nothing more was kept of this request": "这个请求没有更多记录",
     "Codex service tier": "Codex 服务层级",
     "As Codex asks": "按 Codex 的请求",
     "/fast in Codex": "Codex 里的 /fast",
@@ -4904,6 +4905,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Nothing more was kept of this request": "這個請求沒有更多記錄",
     "Codex service tier": "Codex 服務層級",
     "As Codex asks": "依 Codex 的請求",
     "/fast in Codex": "Codex 裡的 /fast",
@@ -9789,6 +9791,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Nothing more was kept of this request": "このリクエストについてこれ以上の記録はありません",
     "Codex service tier": "Codex のサービスティア",
     "As Codex asks": "Codex の指定どおり",
     "/fast in Codex": "Codex の /fast",
@@ -14676,6 +14679,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Nothing more was kept of this request": "Zu dieser Anfrage wurde nichts weiter gespeichert",
     "Codex service tier": "Codex-Servicestufe",
     "As Codex asks": "Wie Codex es anfragt",
     "/fast in Codex": "/fast in Codex",

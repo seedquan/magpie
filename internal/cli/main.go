@@ -15,14 +15,12 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
-	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/browsermcp"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/claudebridge"
 	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/claudetui"
 	"github.com/yetone/magpie/internal/codexrelay"
-	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/imagemcp"
 	"github.com/yetone/magpie/internal/netproxy"
@@ -71,15 +69,9 @@ const usage = `magpie — one place to pick every agent's model
   magpie rename <old> <new>       rename a profile
   magpie rm <name>                delete a profile
 
-  magpie backup [--no-keys] [--no-library] [file]    providers, keys, settings, profiles, agent models and the library in one file, sealed with a passphrase
-  magpie restore [--no-agents] [--no-library] <file> put a backup in on this machine
-                                                     --sign-ins on backup: the subscriptions' and plugins' sign-ins too, sealed (off unless given); --no-sign-ins on restore leaves them out
   magpie uninstall [--yes]                           disconnect every agent, putting back what each had, then remove magpie's service and files
                                                      --keep-data: all but deleting magpie's settings, providers and usage
   magpie data [move <folder>|move --home]            where magpie keeps its files and cache, and moving them to another disk (a link is left where they were)
-  magpie webdav [on <address>|set k=v…|now|off]      the same, kept the same on every computer through a WebDAV folder (magpie webdav help)
-  magpie s3 [on s3://<bucket>[/<prefix>]|set k=v…|now|off]   the same through an S3-compatible bucket: AWS, R2, B2, MinIO… (magpie s3 help)
-  magpie github [on github://<owner>/<repo>[/<folder>]|set k=v…|now|off]   the same in an encrypted GitHub repository (magpie github help)
 
   magpie library [sync|instructions|mcp|skill]   the instructions, MCP servers and skills written into every agent (magpie library help)
 
@@ -468,10 +460,6 @@ func run(args []string) error {
 	// written again when the backend's list changes
 	agent.CodexDesktopList = gateway.CodexDesktopCatalog
 	gateway.CodexDesktopChanged = agent.SyncCatalogSoon
-	// the setup kept the same on every computer, by whichever serves
-	gateway.WhileServing = append(gateway.WhileServing, davsync.Run)
-	// and the setup backed up into a folder here by itself (jwaitq)
-	gateway.WhileServing = append(gateway.WhileServing, backup.RunAuto)
 	// and dsh's patch lists, which dsh reads live: a route left behind by
 	// something else writing the file fails every session there until
 	// magpie writes its own list again
@@ -489,13 +477,6 @@ func run(args []string) error {
 	// server's, a container's), at Claude Code's newest release: its runs
 	// turn its own updater off
 	gateway.WhileServing = append(gateway.WhileServing, claudecode.KeepCurrent)
-	// and the request archive, when it is on, goes to the bucket sync is to
-	gateway.ArchiveBucket = func() (gateway.Putter, bool) {
-		if b, ok := davsync.S3Bucket(); ok {
-			return b, true
-		}
-		return nil, false
-	}
 	if len(args) == 0 {
 		if hasGUI {
 			return runGUI(true, "")
@@ -606,10 +587,6 @@ func run(args []string) error {
 		return updateCmd(args)
 	case "library", "lib":
 		return libraryCmd(args)
-	case "backup":
-		return backupCmd(args[1:])
-	case "restore":
-		return restoreCmd(args[1:])
 	case "uninstall":
 		// Windows' Installed apps: the app's window asks (shortcut.UninstallArgs)
 		if hasGUI && slices.Equal(args, shortcut.UninstallArgs) {
@@ -617,14 +594,8 @@ func run(args []string) error {
 			return runUninstallWindow()
 		}
 		return uninstallCmd(args[1:])
-	case "webdav", "dav":
-		return webdavCmd(args[1:])
 	case "plugin", "plugins":
 		return pluginCmd(args)
-	case "s3":
-		return s3Cmd(args[1:])
-	case "github":
-		return githubCmd(args[1:])
 	case "claude-code":
 		return claudeCodeCmd(args[1:])
 	case "settings":

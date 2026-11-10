@@ -63,10 +63,10 @@ function server(lang, posts, { web = false, size = 100 } = {}) {
   };
 }
 
-const TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "about"];
+const TABS = ["general", "usage", "network", "models", "privacy", "about"];
 const L = {
-  en: ["General", "Allowances", "Network and sharing", "Models", "Privacy", "Observability", "Sync and backup", "About"],
-  zh: ["常规", "额度", "网络与共享", "模型", "隐私", "可观测性", "同步与备份", "关于"],
+  en: ["General", "Allowances", "Network and sharing", "Models", "Privacy", "About"],
+  zh: ["常规", "额度", "网络与共享", "模型", "隐私", "关于"],
 };
 const LABEL = { en: "Settings", zh: "设置" };
 // what each part shows: an element of its own rows, drawn by the page
@@ -179,8 +179,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await page.locator("#setTabs [role=tab]").evaluateAll((bs) => bs.filter((b) => b.tabIndex === 0).map((b) => b.dataset.set)), ["privacy"]);
         await page.locator(":is(#setTab-privacy, .nav-s[data-of=setTab-privacy]):visible").focus();
         await page.keyboard.press("ArrowRight");
-        assert.deepEqual((await shown(page)).parts, ["otel"]);
-        assert.equal((await shown(page)).focus, "otel");
+        assert.deepEqual((await shown(page)).parts, ["about"]);
+        assert.equal((await shown(page)).focus, "about");
         await page.keyboard.press("End");
         assert.deepEqual((await shown(page)).parts, ["about"]);
         await page.keyboard.press("ArrowRight");
@@ -191,34 +191,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual((await shown(page)).parts, ["general"]);
         await page.keyboard.press("ArrowLeft");
         await page.keyboard.press("ArrowLeft");
-        assert.deepEqual((await shown(page)).on, ["sync"]);
+        assert.deepEqual((await shown(page)).on, ["privacy"]);
         assert.equal(await top(page), 0, "the keys move nothing");
 
         // a reload comes back to the part
         await page.reload();
-        await page.locator(MARK.sync).first().waitFor();
-        assert.deepEqual(await shown(page), { on: ["sync"], parts: ["sync"], focus: "", url: "settings/sync" });
+        await page.locator(MARK.privacy).first().waitFor();
+        assert.deepEqual(await shown(page), { on: ["privacy"], parts: ["privacy"], focus: "", url: "settings/privacy" });
 
         // another view leaves the tab out of the address; Settings again
         // brings it back
         await page.locator('#nav [data-view="usage"]').click();
         assert.equal(new URL(page.url()).searchParams.get("tab"), null);
         await page.locator("#prefs").click();
-        assert.deepEqual((await shown(page)).url, "settings/sync");
+        assert.deepEqual((await shown(page)).url, "settings/privacy");
 
         // the window opened again on Settings (no tab in the address): the
         // part last picked
         const again = await open(lang, [], { url: "/?view=settings", ctx: page.context() });
-        await again.locator(MARK.sync).first().waitFor();
-        assert.deepEqual((await shown(again)).parts, ["sync"]);
+        await again.locator(MARK.privacy).first().waitFor();
+        assert.deepEqual((await shown(again)).parts, ["privacy"]);
         // a link to a part opens on it, and it is remembered
-        const link = await open(lang, [], { url: "/?view=settings&tab=otel", ctx: page.context() });
-        await link.locator(MARK.otel).first().waitFor();
-        assert.deepEqual((await shown(link)).parts, ["otel"]);
+        const link = await open(lang, [], { url: "/?view=settings&tab=models", ctx: page.context() });
+        await link.locator(MARK.models).first().waitFor();
+        assert.deepEqual((await shown(link)).parts, ["models"]);
         // one not known: the part remembered
         const bad = await open(lang, [], { url: "/?view=settings&tab=nope", ctx: page.context() });
-        await bad.locator(MARK.otel).first().waitFor();
-        assert.deepEqual((await shown(bad)).parts, ["otel"]);
+        await bad.locator(MARK.models).first().waitFor();
+        assert.deepEqual((await shown(bad)).parts, ["models"]);
         assert.deepEqual([...page.errors, ...again.errors, ...link.errors, ...bad.errors], []);
       });
 

@@ -305,9 +305,8 @@ func TestCallerUsageWithRequestArchive(t *testing.T) {
 			s := New()
 			w := httptest.NewRecorder()
 			lanGuard(s.Handler()).ServeHTTP(w, r)
-			archivePending.Wait()
-			if w.Code != 200 || w.Header().Get(ArchiveHeader) == "" || len(bucket.objs) != 1 {
-				t.Fatal("named caller request was not archived", w.Code, w.Body)
+			if w.Code != 200 || w.Header().Get(ArchiveHeader) != "" || len(bucket.objs) != 0 {
+				t.Fatal("named caller request failed or was archived", w.Code, w.Body)
 			}
 			for _, data := range bucket.objs {
 				if strings.Contains(string(data), secrets[0]) || strings.Contains(string(data), "provider-secret") {

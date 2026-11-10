@@ -638,9 +638,8 @@ type gatewayJSON struct {
 	// Lanes are the keys and accounts with requests out or waiting under
 	// a limit on requests at once (#892), by provider#keyid or
 	// provider@account
-	Lanes   map[string]gateway.Lane `json:"lanes,omitempty"`
-	Groups  []gwGroupJSON           `json:"groups"`  // the catalog's routing groups, listed before the models
-	Archive archiveJSON             `json:"archive"` // the request archive's switch, and where it goes
+	Lanes  map[string]gateway.Lane `json:"lanes,omitempty"`
+	Groups []gwGroupJSON           `json:"groups"` // the catalog's routing groups, listed before the models
 }
 
 // gwGroupJSON is a routing group as the Gateway view lists it.
@@ -1371,7 +1370,6 @@ func providersState() providersJSON {
 			}
 		}
 	}
-	s.Gateway.Archive = archiveState()
 	s.CodexDaemon = provider.CodexDaemonStale()
 	s.CodexApp = provider.CodexAppStale()
 	s.Plugins = pluginSubs()

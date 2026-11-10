@@ -88,15 +88,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         await page.goto("http://magpie.test/");
         await page.locator("#prefs").click();
-        await openPart(page, "sync");
-        const list = page.locator("#syncList");
+        await openPart(page, "general");
+        const list = page.locator("#dataFolderList");
         const row = list.locator(".row.pref.data-folder");
         await row.waitFor({ state: "visible" });
         // the app opened again on the server's view now
         const reopen = async () => {
           await page.reload();
           await page.locator("#prefs").click();
-          await openPart(page, "sync");
+          await openPart(page, "general");
           await row.waitFor({ state: "visible" });
         };
         assert.equal(await row.locator(".name").textContent(), w("Data folder"));
@@ -127,14 +127,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await row.locator("button", { hasText: w("Move…") }).click();
         await ask.locator("button", { hasText: w("Choose a folder…") }).click();
         await ask.waitFor({ state: "detached" });
-        await page.waitForFunction(() => document.querySelectorAll("#syncList .data-folder-said").length === 2);
+        await page.waitForFunction(() => document.querySelectorAll("#dataFolderList .data-folder-said").length === 2);
         assert.deepEqual(await row.locator(".data-folder-said").allTextContents(), [
           w("Moves to {dir} when magpie starts again", { dir: disk }),
           w("Another magpie serves the gateway (magpie serve): stop it, then open magpie again to move them"),
         ]);
         assert.equal(await row.locator("button", { hasText: w("Move…") }).count(), 0, "no second move while one waits");
         await row.locator("button", { hasText: w("Cancel") }).click();
-        await page.waitForFunction(() => document.querySelectorAll("#syncList .data-folder-said").length === 0);
+        await page.waitForFunction(() => document.querySelectorAll("#dataFolderList .data-folder-said").length === 0);
         assert.deepEqual(posts, ["move", "move", "cancel"]);
 
         // moved: the folder on the disk, and Move back, which asks too;
@@ -155,7 +155,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const wide = await page.evaluate(() => {
           const out = [];
           if (document.scrollingElement.scrollWidth > innerWidth) out.push("page " + document.scrollingElement.scrollWidth);
-          for (const r of document.querySelectorAll("#syncList .row.pref")) {
+          for (const r of document.querySelectorAll("#dataFolderList .row.pref")) {
             const b = r.getBoundingClientRect();
             if (b.right > innerWidth + 0.5 || r.scrollWidth > r.clientWidth + 1) out.push(r.querySelector(".name")?.textContent + " " + b.right + "/" + r.scrollWidth + ">" + r.clientWidth);
           }

@@ -1,12 +1,10 @@
 package gui
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -103,8 +101,4 @@ find:
 		t.Errorf("/api/usage/heatmap in %v: to %s, %+v; want to %s, the call on %s", v, h.To, h.Days, day(now, v), date)
 	}
 
-	cells, err := csv.NewReader(strings.NewReader(get("/api/usage/requests.csv?period=today"+tz, nil))).ReadAll()
-	if err != nil || len(cells) != 2 {
-		t.Errorf("CSV of the reader's today: %v, %d lines, want a row under the header", err, len(cells))
-	}
 }

@@ -39,30 +39,14 @@ func loadCostCurrency() {
 	}
 }
 
-// usageCmd: `magpie usage [today|7d|30d|all]` — tokens and cost per agent,
-// model, subscription account and session; with --csv, every request of the
-// period as CSV, one row each, to set beside a vendor's bill, and with
-// --account <name> too, only the calls that account answered (#557). With
-// --days or --last, a rolling window ending now rather than a preset's
-// calendar boundary (#2075), as magpie sessions and magpie quota history
-// take --days.
+// usageCmd shows local token and cost summaries. File and CSV export are
+// removed in this fork; unknown export flags are rejected by the normal parser.
 func usageCmd(args []string) error {
 	return usageTo(os.Stdout, args)
 }
 
 func usageTo(out io.Writer, args []string) error {
-	const how = "usage: magpie usage [--csv [--account <name>]] [--days <n>|--last <dur>] [today|7d|30d|all]"
-	asCSV := false
-	if i := slices.Index(args, "--csv"); i > 0 {
-		asCSV, args = true, slices.Delete(slices.Clone(args), i, i+1)
-	}
-	var f stats.Filter
-	if i := slices.Index(args, "--account"); i > 0 {
-		if i+1 >= len(args) || !asCSV {
-			return fmt.Errorf("%s", how)
-		}
-		f.Account, args = args[i+1], slices.Delete(slices.Clone(args), i, i+2)
-	}
+	const how = "usage: magpie usage [--days <n>|--last <dur>] [today|7d|30d|all]"
 	// a rolling window: --days takes a number of days (1, 7, even 1.5, as
 	// magpie quota history's does) and --last a duration (24h, 90m), both
 	// ending now, where the presets begin at a local midnight (#2075)
@@ -133,10 +117,6 @@ func usageTo(out io.Writer, args []string) error {
 		default:
 			return fmt.Errorf("%s", how)
 		}
-	}
-	if asCSV {
-		rows, _, _ := stats.Ledger(period, f)
-		return stats.WriteCSV(out, rows)
 	}
 	loadCostCurrency()
 	// s is the calls through magpie, d the calls the agents made on their

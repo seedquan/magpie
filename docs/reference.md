@@ -395,14 +395,13 @@ agent's own User-Agent" unticked) sends magpie's in its place;
 and a vendor whose own client magpie goes as (OpenCode, Cline, Kilo) keep
 the User-Agent their sign-in sends, and don't take it.
 
-`magpie usage` (and `--csv`) takes `today`, `7d`, `30d` or `all`, each from a
+`magpie usage` takes `today`, `7d`, `30d` or `all`, each from a
 local midnight, or a window ending now: `--last 24h` (any Go duration, `90m`)
-or `--days 1.5`; the CSV then holds that window's calls only (#2075).
+or `--days 1.5`.
 
 `magpie usage` also lists **upstream provider keys** to help check upstream bills.
 Each request records the fingerprint and saved name of the key that actually
-served it, including image calls and account/key failover. The CSV adds
-`provider_key_id` and `provider_key_name`. JSON uses `providerKeyId` and `providerKeyName`, distinct from gateway caller
+served it, including image calls and account/key failover. JSON uses `providerKeyId` and `providerKeyName`, distinct from gateway caller
 keys. System One calls use the same attribution. No raw credential is stored
 in usage records.
 Rotating the provider's first key does not move old usage to its replacement;
@@ -512,13 +511,12 @@ orders and bars a group by the figure it shows first (`usage.Totals`
 It lists **accounts** too: each Codex, Claude or other subscription account's
 tokens and cost, by the account that actually answered — the one that took
 over after a failover, the one `X-Magpie-Account` pinned. The account is named
-as the Routing view names it (its email or login, never a token); the CSV
-adds `provider_account` (JSON `providerAccount`), `magpie usage --csv
---account <name>` keeps one account's calls, and the app's Usage page has an
+as the Routing view names it (its email or login, never a token). JSON uses
+`providerAccount`, and the app's Usage page has an
 Accounts list and an Account filter on Requests. An older record names the
 account its call went out as when its host says so (`chatgpt.com as
 dee@example.com`); otherwise it appears as **account not recorded**, never
-inferred from today's sign-in. OTLP export never carries the account.
+inferred from today's sign-in.
 
 One magpie can serve several computers (an office one, a personal one):
 share it on the network (Settings → Network and sharing → Share on local network), and on each
@@ -1581,8 +1579,7 @@ relay that sells `kimi-k3` as `moonshot-kimi-k3` answers as `kimi-k3`, so its
 calls are counted at `relay-a/kimi-k3`'s price. A model with a price of its
 own, `0` included, keeps it when the reply's name is that model however
 spelled, the vendor's own alias, or a relay's rename. A call the vendor
-genuinely answered with another model — the `swapped` mark `magpie usage
---csv` and the Requests page show — is counted at the model that answered,
+genuinely answered with another model — the `swapped` mark the Requests page shows — is counted at the model that answered,
 which is the one the vendor billed for; a price you set for the model you
 asked for, `0` included, still says what that model costs you, and when the
 model that answered has no price the asked-for one's is kept.
@@ -3629,334 +3626,12 @@ Keys in the terminal version:
 Agents read their config at startup, so a running session keeps its model
 until you start a new one.
 
-### Moving to another machine
+### Data exports in this fork
 
-```sh
-magpie backup                   # writes magpie.magpie-backup, asks for a passphrase twice
-magpie backup --no-keys ~/b.magpie-backup   # the same with no API keys in it
-magpie restore magpie.magpie-backup         # on the other machine
-magpie restore --no-agents b.magpie-backup  # providers, settings, profiles; agents left as they are
-magpie restore --no-library b.magpie-backup # the library here left as it is
-```
-
-A backup holds your providers (with their keys, unless `--no-keys`), the
-pictures picked for them, the settings, the profiles, every agent's model and
-the library (unless `--no-library`): the instruction sets, the MCP servers and
-the skills with their files, templates and other binaries included (a file
-over 16 MB is left out, and so are the biggest once the skills' files come to
-32 MB; restoring keeps the copy of such a file the other machine already
-has). Without keys, a
-server's environment variables and headers that look like a key go empty.
-Gateway credentials, their names, ids and disabled state travel encrypted
-with Settings too. Restoring Settings replaces the gateway-key store with
-the backed-up one. `--no-keys` leaves gateway credentials and their legacy
-mirror out; restoring it preserves the destination's existing keys instead.
-Restoring the library replaces the one there — what it replaces is kept with
-the library's backups — and writes it into the agents on that machine.
-It is encrypted on your machine (AES-256-GCM, the key derived from the
-passphrase with PBKDF2-SHA256); nothing in it can be read without the
-passphrase. Restoring replaces providers with the same id and adds the rest;
-one that came without a key keeps the key already there. Agent models are set
-only for agents installed on that machine. Subscriptions are not in it: sign
-in to them on each machine. Their model picks and settings come along, and
-show once signed in; the restore, and a sync's status on the other machine,
-name the ones still to sign in to. The plugins added from npm or git come
-along too and are installed where it is put back (one added from a folder
-stays on its machine; without keys, an option whose name looks like a key
-is left out); a plugin's sign-in is not carried, a plugin already there is
-left as it is, and one removed on one machine stays on the others. Piped
-in, the passphrase is the first line of stdin.
-
-### Keeping machines in sync
-
-*Settings → Sync and backup → WebDAV, S3 or GitHub sync* keeps the same backup
-on a server and brings every machine up to date with it, every 3 minutes while
-the gateway runs. Choose one of these:
-
-- **WebDAV**: a folder on a WebDAV server such as 坚果云, Nextcloud or a
-  Synology.
-- **S3**: a bucket on AWS S3, Cloudflare R2, Backblaze B2, MinIO, Garage, a
-  NAS or any other S3-compatible server.
-- **GitHub**: an existing repository, using a fine-grained token
-  with Contents read and write permission. The repository must be private:
-  sync refuses a public one, whose history would give anyone every sealed version.
-  The address can include a folder, such as `github://owner/repo/magpie-sync`.
-  Each update is a commit to that branch, so the repository also provides a
-  history of the encrypted backup.
-
-The file is sealed on your machine with the passphrase, so the server only
-ever stores ciphertext. Each machine writes only over the version it read (a
-conditional write), so an update that another machine made in between is
-merged rather than lost.
-
-A change to an agent's model (or any of its fields) on one machine reaches
-the others. When sync changes one on a machine and you set it back there,
-that machine keeps its own: the other machines' picks no longer change it
-there, and its picks stay there, while everything else keeps syncing.
-Settings → Sync lists those fields under **Kept on this computer**, and
-**Follow the others** takes the synced value again.
-
-```sh
-magpie webdav on https://dav.jianguoyun.com/dav/ user=me@example.com
-magpie s3 on s3://my-bucket/magpie endpoint=https://<account>.r2.cloudflarestorage.com access-key-id=…
-magpie s3 on s3://backups endpoint=http://nas.local:9000 path-style=yes access-key-id=…
-magpie s3                       # where it syncs to and how the last sync went; magpie s3 now, off
-magpie github on github://owner/private-backups/settings branch=main
-magpie github                   # where it syncs to and how the last sync went; magpie github now, off
-```
-
-For S3:
-
-- `endpoint` is empty for AWS.
-- `region` defaults to `us-east-1`, or to `auto` on R2.
-- `path-style=yes` puts the bucket in the path, which MinIO and most servers
-  you run yourself need.
-- The secret is asked for and saved like the WebDAV password. It is used only
-  with the endpoint and access key it was given for.
-- The bucket must already exist.
-- The access key needs to read and write `<prefix>/magpie/`. On AWS it also
-  needs to list the bucket.
-- A server without conditional writes is supported. There magpie checks the
-  object's ETag just before each write. Two computers that write in the
-  same moment can both pass that check (Aliyun OSS, #1776), and the later
-  write is the one kept. The other computer notices at its next sync, a
-  few minutes later. It finds a file other than the one it wrote, so it
-  merges again from before its own write: what it changed goes back up
-  beside the other computer's change. It never takes the other's file as
-  having seen its own.
-- Shared usage is reconciled only after a complete S3 listing. A missing or
-  repeated continuation token, or a listing still truncated after 100 pages,
-  reports a sync error and keeps previously downloaded usage days in place.
-
-For GitHub:
-
-- Create the repository before enabling sync. Leaving Branch empty uses its
-  default branch. For an empty repository, the first encrypted backup creates
-  the initial commit on that default branch. A selected branch other than the
-  default must already exist.
-- Give a fine-grained token access to this repository with Contents read and
-  write permission. It is asked for by the CLI, never accepted in a command
-  line, and is saved separately from the library's GitHub token.
-- Folder is optional. Files go in `<folder>/magpie/`; every changed backup
-  creates a commit. Unchanged setup creates no backup commit.
-- Use the same encryption passphrase on every computer. It must differ from
-  the GitHub token. The token and sync connection settings stay on each computer.
-- The file limit is 64 MiB. Repository history retains encrypted old versions,
-  including usage files if sharing is enabled.
-- Switching between WebDAV, S3 and GitHub keeps the other services' settings
-  and credentials for switching back; one service syncs at a time.
-
-## OTLP export
-
-Settings → Observability can export gateway request metadata over OTLP/HTTP
-(JSON). Export is off by default. Set the collector's base URL and optional
-headers, then enable **OTLP export**. **Export metrics** is separately off by
-default; enable it for a collector that accepts duration and token histograms.
-No restart is needed for saved settings. The export is the built-in plugin
-`otel` (Observability in Plugins › Built-in), which stays on while settings
-or the environment say to export.
-
-For `magpie serve`, environment variables override the saved preferences:
-
-```sh
-MAGPIE_OTEL_ENABLED=true MAGPIE_OTEL_ENDPOINT=http://localhost:4318 magpie serve
-```
-
-- `MAGPIE_OTEL_ENABLED`: `true` or `false`; an endpoint alone does not enable export.
-- `MAGPIE_OTEL_ENDPOINT`: an HTTP(S) base URL; `/v1/traces` and `/v1/metrics` are appended.
-- `MAGPIE_OTEL_HEADERS`: comma-separated `name=value` pairs, for example
-  `Authorization=Bearer%20token`. Percent-encode spaces and commas in values.
-- `MAGPIE_OTEL_METRICS`: `true` or `false`, off by default.
-- `MAGPIE_OTEL_SESSIONS`: `true` or `false`, off by default; trace supported local
-  agent interactions from newly recorded session events.
-- `MAGPIE_OTEL_BODIES`: `true` or `false`, off by default; sends each call's
-  request and reply as the trace's Langfuse input and output.
-- `MAGPIE_OTEL_BODIES_WHOLE`: `true` or `false`, off by default; with bodies on,
-  keeps them entire rather than cut at 256 KB. A long reply is written to a
-  temporary file; a body too large for the collector is still refused.
-- `OTEL_RESOURCE_ATTRIBUTES`: the standard OpenTelemetry variable, merged into
-  the resource of both traces and metrics, for example to tell servers apart:
-
-  ```sh
-  OTEL_RESOURCE_ATTRIBUTES='service.instance.id=magpie-prod-01,host.name=server-a,deployment.environment.name=production' \
-    MAGPIE_OTEL_ENABLED=true MAGPIE_OTEL_ENDPOINT=http://localhost:4318 magpie serve
-  ```
-
-  Comma-separated `key=value` pairs, as the
-  [OTel resource SDK spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md#specifying-resource-information-via-an-environment-variable)
-  has them: keys and values are trimmed and percent-decoded (write `,` as
-  `%2C`, `=` as `%3D` and `%` as `%25`; `+` stays a plus), every value is a
-  string, and the last of a repeated key wins. Any invalid entry (no `=`, an
-  empty key, a bad escape, bytes that aren't UTF-8 once decoded, an empty
-  entry such as a trailing comma) discards the whole variable: magpie logs
-  which entry, never its contents, and exports with the default resource.
-  Nothing else about the machine is looked up or sent.
-- `OTEL_SERVICE_NAME`: the resource's `service.name`, over a `service.name` in
-  `OTEL_RESOURCE_ATTRIBUTES`. With neither set, or set empty, it is `magpie`.
-
-  Neither variable turns export on, and both are read in the process that
-  exports (the app, or `magpie serve`), so restart it after changing them.
-
-For Langfuse, pick **Collector › Langfuse**, then the host (Cloud EU
-`https://cloud.langfuse.com`, Cloud US `https://us.cloud.langfuse.com`, or
-**Self-hosted** with your own address, which also takes another Langfuse
-Cloud region such as `https://jp.cloud.langfuse.com`) and the project's public
-and secret keys (Langfuse › Settings › API Keys). magpie saves them as the
-endpoint `<host>/api/public/otel` and the header
-`Authorization: Basic <base64(public-key:secret-key)>`, kept with the other
-OTLP headers (left out of a backup without keys). Nothing is saved until both
-keys are there. A first setup also adds `x-langfuse-ingestion-version: 4`
-(Langfuse's docs: without it, OTLP data can show up to 10 minutes late), turns
-metrics off, since Langfuse takes traces only, and turns export on. A Langfuse
-endpoint set up by hand opens in this view with its keys filled in, and
-changing a key or the host keeps every other header and the metrics and
-export choices as they were. Switching from another collector leaves that
-collector's headers behind. For `magpie serve`, the same values go in the
-environment: `MAGPIE_OTEL_ENDPOINT=https://cloud.langfuse.com/api/public/otel`
-and `MAGPIE_OTEL_HEADERS=Authorization=Basic%20<base64(public-key:secret-key)>,x-langfuse-ingestion-version=4`.
-
-Traces include agent, provider, model, token counts (including cache and
-reasoning), HTTP status, timing, route ID, and the name of the gateway key the
-request came with (`magpie.gateway_key.name`, absent without a key; never the
-key's ID or secret). Attempts with the same route ID
-share a trace ID. Chat, Responses, Anthropic and Gemini gateway requests
-also export a parent request span and child spans for every routing attempt,
-including unbilled failures, retries and fallbacks, so Langfuse can render a
-waterfall. A valid incoming W3C version-00 `traceparent` connects these spans
-to the caller's trace. Attempt spans carry token usage; the parent does not
-duplicate it. Attempt timings include any wait for a concurrency slot, while
-routing and retry delays remain visible as gaps inside the parent span.
-Tool execution inside the caller is outside the gateway's trace.
-
-Model-call spans also send estimated USD input, output and total costs to
-Langfuse via `langfuse.observation.cost_details`, using the same effective
-prices as Magpie's usage ledger (custom prices first, then catalog prices).
-Input cost includes cache reads and writes; reasoning tokens are already
-included in output cost. Explicit zero prices are exported too. Unknown
-prices are omitted so Langfuse can use its own model pricing. Parent and tool
-spans carry no costs, avoiding duplicate counting. Subscription costs at
-catalog prices are API-equivalent estimates, not subscription charges.
-
-Enable **Trace agent conversations** to instead export one trace per
-user interaction, grouping model calls and tool executions under an agent
-root. Conversation IDs group those traces into Langfuse sessions. Gateway traces
-remain available until a visible local store covers that exact agent/session.
-For Codex and Pi, a readable session header establishes readiness without
-waiting for a model/tool span. The first request checks a header bounded to
-256 KiB when needed (including Codex base instructions); subsequent polls keep
-idle sessions ready while their files remain among the reader's 200 newest main
-files. Claude children have a separate 200-file quota and share the same 8 MiB
-polling read budget. Header checks never upload history or bodies. Discovery is shared across
-request IDs for two seconds. The request that refreshes discovery waits for the
-scan; other unresolved concurrent requests retain gateway traces without waiting.
-Polling reuses headers by path, size and mtime.
-Other adapters still use recent observations (five minutes).
-Only loopback requests without a gateway key can be deduplicated. The native
-client session ID takes precedence over a Magpie routing override; unknown
-sessions retain gateway traces, including WSL mirrored and Docker Desktop
-clients whose sessions are not visible locally. Requests without a session ID
-fall back to recent observations for that agent.
-Claude Code/Cowork readers also follow `<session>/subagents/*.jsonl` and a
-workflow's (ultracode) `<session>/subagents/workflows/<run>/agent-*.jsonl`
-(not its `journal.jsonl`). Child
-interactions share their parent session and use separate trace/span IDs, even
-when a user UUID is copied. Child final responses are combined across content
-blocks and exported when the transcript is unchanged for two seconds; no
-`turn_duration` is required.
-Their start times remain inferred; a parent tool link is not guessed. Main-thread calls can therefore be deduplicated. Claude
-tool-less small requests (`max_tokens` at most 4096), including title/haiku
-helpers, retain gateway traces because they may not enter a transcript. This
-conservative rule can retain a short tool-less main request as well. Explicitly
-classified auxiliary calls also retain gateway traces for other agents. This
-includes Codex calls with an explicit kind (subagent, review, memgen, title or
-compact): even if a child has a readable rollout, these can appear twice. Only
-its unclassified calls use local-session deduplication; a rollout alone does not
-prove every auxiliary request was recorded. Keyed and non-loopback clients
-always retain gateway traces. Magpie reads new events from local session stores
-every two seconds; it does not upload
-completed history when enabled. Restarting or changing the destination starts
-an observation window. Span IDs remain stable across repeated records.
-
-Pi and Codex have been tested end to end with real clients. The other adapters
-are covered by format fixtures but have **not been tested end to end**.
-
-Supported clients and formats:
-
-| Client | Local store | Timing |
-| --- | --- | --- |
-| Codex | JSONL rollouts (`token_usage_record`, `item_completed`, `response_item`) | Recorded operations and paired native tools; inferred model/native-tool intervals |
-| Pi | Version-3 JSONL; optional `timing-final` | Recorded model times; inferred tool intervals |
-| Oh My Pi | Pi-compatible JSONL, including `model_usage` | Pi timing; auxiliary calls have inferred zero duration |
-| Claude Code / Cowork | `projects/*/*.jsonl`, `<session>/subagents/*.jsonl` and `<session>/subagents/workflows/*/agent-*.jsonl`, repeated assistant blocks and paired tool results | Inferred model/tool starts; recorded transcript boundaries |
-| OpenCode | SQLite V1/V2 (`message`/`part` or `session_message`); legacy JSON storage | Recorded model and tool timestamps |
-| Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json[l]`, including patches and rewinds | Inferred intervals from message/tool event boundaries |
-
-The adapters follow upstream schemas:
-[OpenCode V1](https://github.com/anomalyco/opencode/blob/dev/packages/schema/src/v1/session.ts),
-[OpenCode V2](https://github.com/anomalyco/opencode/blob/dev/packages/schema/src/session-message.ts),
-[Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingTypes.ts),
-[Oh My Pi](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/session/session-manager.ts).
-Claude transcript records are checked against local Claude Code sessions;
-its [hook documentation](https://code.claude.com/docs/en/hooks) describes
-transcript locations. Separate subagent transcripts are not joined: the parent
-agent's task/delegation tool is included, but its children's internal work is
-not yet linked. No hooks or client changes are required.
-
-Polling uses a soft 8 MiB reading budget and up to 200 recent files per store.
-JSONL files are read incrementally; incomplete lines wait for the next poll.
-OpenCode SQLite is opened read-only, including WAL changes, and unchanged
-stores are skipped. SQLite message/part updates are read incrementally in bounded
-batches on separate read-only connections; oversized conversations resume on the
-next poll. OpenCode retains up to 256 messages and an 8 MiB body window per
-session; individual rows above 8 MiB export metadata only. Legacy JSON and
-Gemini snapshot reads cap at 32 MiB; Gemini retains the current prompt plus
-255 recent messages.
-Completed observations are deduplicated with bounded metadata. Claude's final
-response and Gemini's final token records may take one extra poll to settle.
-
-Inferred timings carry `magpie.timing.source=inferred`. Tool arguments/results
-and user input/output follow **Include request and response bodies**, masking
-secrets and respecting the whole-body preference. Session directory/title
-metadata, credentials and account names are not exported.
-
-Conversation tracing replaces standalone gateway traces for these local
-clients to avoid duplicate token usage. Unsupported clients and remote
-forwarded requests retain gateway tracing; the local usage ledger is unchanged.
-This mode shows agent activity rather than gateway retries or provider-routing
-details. It reads this computer's local sessions, including calls made without
-Magpie as the proxy.
-
-Metrics group duration and input/output token histograms by agent, provider,
-model, operation, error status and gateway key name. Each gateway key name
-multiplies a metric's series (one set per name requests came with), which
-matters to a collector that limits or bills by series; a name is not unique,
-so keys sharing one are counted together. Prompt/reply text is exported only when
-**Include request and response bodies** is enabled (`MAGPIE_OTEL_BODIES=true`);
-secrets are masked and each body is limited to 256 KiB unless **Include the
-whole bodies** is enabled. Conversation IDs are exported only with
-conversation tracing; provider account names/keys are never exported.
-
-Whole bodies increase transient memory and allocation costs during read-back,
-secret scrubbing and JSON encoding; a 32 MiB request and reply can roughly
-double total allocations compared with truncated export. The export limits
-queued bodies to 128 MiB, but this does not bound in-flight processing memory.
-Recent calls retain only the first 256 KiB of each body.
-
-Export runs in the background with a bounded queue (128 records) and batches
-of up to 32 records, flushed every five seconds. A full queue drops telemetry
-without delaying gateway requests. Network errors and HTTP 429/502/503/504
-are retried up to two times, with retry delays capped at 60 seconds; other
-errors and partial rejection are logged
-without the collector's response body. Each HTTP attempt times out after
-three seconds. Graceful gateway shutdown allows at most three seconds to
-drain; `magpie serve` currently exits on SIGTERM without draining, so its last
-batch may be lost. This is best-effort export; local usage records remain
-available if it fails.
-Requests follow magpie's proxy setting, with loopback collectors going direct.
-Queued records are discarded if export is disabled or the destination or
-credentials change before sending. Redirects are not followed.
-Backups without keys omit OTLP headers; restoring one preserves this machine's
-headers only when the collector endpoint is unchanged.
+Cloud sync, local backup/restore, OTLP and session tracing, local/S3 request
+archives, session Markdown and usage CSV export have been removed.
+See [the fork policy](subsystems/sync-backup.md). Legacy settings cannot
+reactivate them; existing saved data is preserved.
 
 ## Mirrors
 
@@ -4085,63 +3760,16 @@ In `~/.cache/magpie`:
 
 `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` are respected.
 
-## Counting users
+## Telemetry in this fork
 
-Once a day, a running magpie (the app, or `magpie serve`) sends one event to
-PostHog so we know how many people use it: a random id made up on your
-computer (`~/.config/magpie/install-id`, made the first time the event is
-sent), magpie's version, and your system and architecture. The day it last
-went is in `~/.config/magpie/stats-sent`, so a day is sent once; the
-event is tried at start and then every hour.
+Daily PostHog events and partner usage events are permanently disabled.
+The app creates no telemetry install ID or daily-send marker. Legacy opt-in
+settings and telemetry environment variables cannot enable them. The Privacy
+page has no telemetry opt-in controls.
 
-With it goes what magpie is used with, so we know which agents, providers
-and models to look after first, by magpie's own ids only:
-
-- the agents connected to magpie (`claude`, `codex`); an omp profile is
-  only `omp`;
-- the providers that are on: a preset's id (`deepseek`), a subscription's
-  (`codex`, `copilot`), a community plugin's (`plugin:kiro`); a provider you
-  added yourself is only `custom`, another plugin only `plugin`;
-- the models the connected agents are set to, as the provider's id and the
-  vendor's model id (`deepseek/deepseek-v4`); on a key's provider, a model
-  id that [models.dev](https://models.dev) doesn't list (a local model, a
-  fine-tune) is only `<provider>/other`; one on a provider of your own is
-  only `custom`, a routing group only `group`;
-- how many of each, and how many routing groups you have.
-- for each partner (a sponsor listed first in the add sheet), by its id, how
-  many times a day the add sheet showed it, its row was opened, its key
-  page was opened and a provider was added from it (at most 20 of each,
-  5 adds), kept in `~/.cache/magpie/partner-counts.json` for at most 14
-  days and sent the day after as `magpie partner` events.
-
-No names, base URLs, accounts, keys, prompts or usage go. Turn that part off
-in Settings → Privacy → Share the agents, providers and models I use; the
-day's event then has the id, version and system only. Turn it all off in
-Settings → Privacy → Count me as a user, or with `DO_NOT_TRACK=1` or
-`MAGPIE_NO_STATS=1`. Builds from source never send it. The code is
-[internal/stats](../internal/stats/stats.go). Deleting `install-id` makes a
-new one at the next send. The [Privacy page](https://usemagpie.ai/docs/privacy)
-shows a whole batch and everything else magpie sends by itself.
-
-Partners are also counted where usemagpie.ai sees them, whatever these
-settings say, as any website sees its visits. The partner list
-(`/api/partners`) gives each partner's website and key page as a
-`https://usemagpie.ai/go/<id>/site|keys[/<region>]` link, which sends a
-`magpie partner go` event (the partner, which link, the region, and the
-country Cloudflare gives) before sending the browser on; and one in ten
-fetches of the list sends a `magpie partners fetch` event with weight 10
-and the country, while a partner is listed. Each event has an id of its
-own: no install id, address or account goes with it. The code is
-[site/worker.js](../site/worker.js).
-
-A plugin's, an import link's and the library's icons sit on hosts their
-authors picked. magpie fetches each through
-`https://usemagpie.ai/api/icon?url=<https URL>`, so the host sees
-Cloudflare's address and never the user's. The worker sends only
-`Accept: image/*` and its own User-Agent, passes on a PNG, JPEG, GIF, WebP,
-ICO or SVG of at most 1 MB and refuses anything else, and counts and keeps
-nothing. The code is [internal/iconproxy](../internal/iconproxy/iconproxy.go)
-and `icon` in [site/worker.js](../site/worker.js).
+This does not make the app offline: provider requests, sign-in, catalog/icon
+fetches and explicitly installed community plugins may contact their configured
+services. The removed exporters never send session data to a collector or archive.
 
 ## Community
 

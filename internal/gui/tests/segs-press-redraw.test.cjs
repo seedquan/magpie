@@ -269,16 +269,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.deepEqual(await page.evaluate(() => optClicks), [{ place, i, live: true }], `${tab}: ${place} option ${i}`);
           }
         };
-        for (const tab of ["general", "usage", "network", "models", "privacy", "otel", "sync", "about"]) {
+        for (const tab of ["general", "usage", "network", "models", "privacy", "about"]) {
           await page.evaluate((tab) => document.querySelector("#setTab-" + tab).click(), tab);
           await page.locator(`#setPage-${tab}`).waitFor();
           await settle(page);
-          if (tab === "sync") {
-            // its form opened, for the kind of server it syncs to
-            await page.locator("#syncList .row.pref").first().locator(".val button").nth(1).click();
-            await page.locator("#syncList .sync-form .segs").waitFor();
-            await sweep(tab);
-          } else await sweep(tab);
+          await sweep(tab);
         }
         // each subscription's own, in its provider's editor
         for (const id of SUBS) {

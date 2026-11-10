@@ -9,8 +9,7 @@ import (
 // Observer is the gateway's observer point (P3 of
 // docs/subsystems/plugin-runtime.md): it watches what the gateway serves
 // and what the ledger is written, and never changes either. A plugin
-// registers one with Observe while it is on (plugins/otel registers
-// internal/otlp's exporter); with none registered the gateway does no
+// registers one with Observe while it is on; with none registered the gateway does no
 // observing work at all, not even keeping a reply's whole body.
 //
 // It lives here, not in the gateway, because every row it sees is a usage

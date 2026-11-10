@@ -161,8 +161,6 @@
     <button type="button" role="tab" id="setTab-network" data-set="network" aria-controls="setPage-network" data-t>Network and sharing</button>
     <button type="button" role="tab" id="setTab-models" data-set="models" aria-controls="setPage-models" data-t>Models</button>
     <button type="button" role="tab" id="setTab-privacy" data-set="privacy" aria-controls="setPage-privacy" data-t>Privacy</button>
-    <button type="button" role="tab" id="setTab-otel" data-set="otel" aria-controls="setPage-otel" data-feature="otel" data-t>Observability</button>
-    <button type="button" role="tab" id="setTab-sync" data-set="sync" aria-controls="setPage-sync" data-t>Sync and backup</button>
     <button type="button" role="tab" id="setTab-plugins" data-set="plugins" aria-controls="setPage-plugins" data-t hidden>Plugins</button>
     <button type="button" role="tab" id="setTab-about" data-set="about" aria-controls="setPage-about" data-t>About</button>
   </div><input class="sess-filter set-q" id="setQ" type="search" spellcheck="false" autocomplete="off" placeholder="Find a setting" aria-label="Find a setting" data-tp></div>
@@ -260,6 +258,7 @@
         <button type="button" id="sessionTerminalSelect" class="sess-pick session-terminal-select" aria-label="Session terminal" aria-haspopup="menu" aria-expanded="false" data-ta></button>
       </div>
     </div>
+    <div class="list prefs" id="dataFolderList"></div>
   </section>
   <section class="set-page" id="setPage-usage" role="tabpanel" aria-labelledby="setTab-usage">
     <div class="list prefs">
@@ -397,12 +396,6 @@
     <div class="list prefs" id="signInOpenList"></div>
     <div class="row-head"><span class="label" data-t>Agents' session history</span></div>
     <div class="list prefs" id="sessionReadsList"></div>
-  </section>
-  <section class="set-page" id="setPage-otel" role="tabpanel" aria-labelledby="setTab-otel" data-feature="otel">
-    <div id="otelList"></div>
-  </section>
-  <section class="set-page" id="setPage-sync" role="tabpanel" aria-labelledby="setTab-sync">
-    <div class="list prefs" id="syncList"></div>
   </section>
   <section class="set-page" id="setPage-plugins" role="tabpanel" aria-labelledby="setTab-plugins">
     <div class="plugin-slot" data-slot="settings" hidden></div>
@@ -566,7 +559,6 @@
 <script src="plugins/usage/client.js"></script>
 <script src="plugins/redact/i18n.js"></script>
 <script src="plugins/redact/client.js"></script>
-<script src="plugins/otel/i18n.js"></script>
 <script src="purposes.js"></script>
 <script src="app.js"></script>
 <script src="plugins.js"></script>
@@ -575,7 +567,6 @@
 <script src="plugins/usage/page.js"></script>
 <script src="plugins/redact/page.js"></script>
 <script src="plugins/redact/demo.js"></script>
-<script src="plugins/otel/page.js"></script>
 <script src="plugins/gateway/settings.js"></script>
 <script src="plugins/search/settings.js"></script>
 <script src="plugins/routing/settings.js"></script>

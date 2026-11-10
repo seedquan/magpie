@@ -161,17 +161,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".rt-log-head .rt-bodies-b").textContent(), w.open);
       assert.equal(await page.locator(".rt-log-head .mask-badge").count(), 0, "nothing masked, no badge");
 
-      // gone from the recent calls, kept by the archive: read back from it
+      // A legacy archive id cannot restore a download action.
       await tap(page.locator(".rt-log-head .rt-bodies-b"));
-      const fetch = page.locator(".rt-bodies .call-archive button.text").first();
-      await fetch.waitFor();
-      assert.equal(await fetch.textContent(), w.fetch);
-      await tap(fetch);
-      await page.locator(".rt-bodies .call-archive .call-body").nth(1).waitFor();
-      const archived = await page.locator(".rt-bodies").innerText();
-      assert.match(archived, /REQ-100/);
-      assert.match(archived, /RES-100/);
-      assert.deepEqual(await fits(page), { head: [], out: [], accent: [] });
+      await page.locator(".rt-bodies .rt-bodies-gone").waitFor();
+      assert.equal(await page.locator(".call-archive").count(), 0);
 
       // in neither: says how to keep them
       await pick(2);
@@ -179,8 +172,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await tap(page.locator(".rt-log-head .rt-bodies-b"));
       const gone = page.locator(".rt-bodies .rt-bodies-gone");
       await gone.waitFor();
-      assert((await gone.textContent()).includes(w.gone), await gone.textContent());
-      assert(!(await gone.textContent()).includes(w.goneOn), "the archive is off: says to turn it on");
+      assert.equal(await gone.textContent(), await page.evaluate(() => t("Nothing more was kept of this request")));
+      assert.equal(await page.locator(".call-archive").count(), 0);
       assert.deepEqual(await fits(page), { head: [], out: [], accent: [] });
       assert.deepEqual(seenCalls, ["?route=101", "?route=100", "?route=99"]);
       assert.deepEqual(errors, []);
@@ -219,8 +212,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const gone = page.locator(".rt-bodies .rt-bodies-gone");
       await gone.waitFor();
       const text = await gone.textContent();
-      assert(text.includes(w.gone), text);
-      assert(text.includes(w.goneOn), text);
+      assert.equal(text, await page.evaluate(() => t("Nothing more was kept of this request")));
+      assert.equal(await page.locator(".call-archive").count(), 0);
       assert.deepEqual(await fits(page), { head: [], out: [], accent: [] });
       assert.deepEqual(seenCalls, ["?route=99"]);
       assert.deepEqual(errors, []);

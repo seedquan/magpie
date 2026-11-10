@@ -3164,9 +3164,7 @@ function routingPage(part) {
   // page, a Codex prediction say, couldn't be opened to what was sent and
   // what came back). The gateway's recent calls keep the last 40 calls'
   // bodies, cut at 256 KB and in memory only, read when asked as the
-  // Gateway page's are (#1521); once they have let the request go, the
-  // request archive's copy, when it was on. Nothing more is recorded for
-  // it: without the archive an older request says how to keep them.
+  // Gateway page's are (#1521). Once evicted, no archive copy is available.
   const bodiesGot = new Map(); // route id → { busy } | its bodies | { gone } | { error }
   const wireOpen = new Set(); // route ids whose HTTP headers are open
   async function loadBodies(id) {
@@ -3206,17 +3204,7 @@ function routingPage(part) {
       return;
     }
     if (got.gone) {
-      if (r.archive) {
-        const draw = () => { if (bodiesFor === r.id) bodies.replaceChildren(archivePanel(r.archive, "rt|" + r.id, draw)); };
-        draw();
-        return;
-      }
-      // with the archive on, the request is one it didn't keep (made while
-      // it was off, or not saved): saying to turn it on read as if it were
-      // off (wangb on Discord)
-      bodies.replaceChildren(el("p", "rt-bodies-gone", providers?.gateway?.archive?.on
-        ? t("magpie keeps the request and response of only the last 40 requests, until it quits. Request archive is on, but this request isn't in it: it was made while the archive was off, or it couldn't be saved.")
-        : t("magpie keeps the request and response of only the last 40 requests, until it quits. To keep every request's, turn on Request archive at the top of Usage › Requests.")));
+      bodies.replaceChildren(el("p", "rt-bodies-gone", t("Nothing more was kept of this request")));
       return;
     }
     const grid = el("div", "call-details");
