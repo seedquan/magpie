@@ -93,8 +93,8 @@ func TestPiMCPGlobalAdapterMerge(t *testing.T) {
 		t.Errorf("read: %v %v", have, err)
 	}
 	bs, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "pi", "mcp.json"))
-	if len(bs) != 1 {
-		t.Errorf("backups: %v", bs)
+	if len(bs) != 0 {
+		t.Errorf("migration created snapshots: %v", bs)
 	}
 	// once nothing is left, mcp.json goes
 	write(t, old, `{"mcpServers": {"clash": {"command": "new"}}}`)
@@ -262,7 +262,7 @@ func TestPiMCPNative(t *testing.T) {
 	if len(tg.MCP.Extra) != 1 || tg.MCP.Extra[0] != adapter {
 		t.Errorf("extra: %v", tg.MCP.Extra)
 	}
-	if n := backups(); n != before+1 {
+	if n := backups(); n != before {
 		t.Errorf("backups of mcp-adapter.json: %d, %d before", n, before)
 	}
 	have, err := tg.MCP.read()
@@ -327,9 +327,8 @@ func TestPiNativeVersions(t *testing.T) {
 }
 
 // #1097: when pi-mcp-adapter 4 is loaded and mcp.json is moved whole to
-// mcp-adapter.json, the user's mcp.json is copied aside first, byte for
-// byte, and its servers survive.
-func TestPiMCPWholeMoveKeepsABackup(t *testing.T) {
+// mcp-adapter.json, its servers survive without a persistent snapshot.
+func TestPiMCPWholeMoveCreatesNoBackup(t *testing.T) {
 	h := sandbox(t)
 	d := filepath.Join(h, ".pi/agent")
 	write(t, filepath.Join(d, "settings.json"), `{ "quietStartup": false, "packages": ["npm:pi-mcp-adapter"] }`)
@@ -340,11 +339,8 @@ func TestPiMCPWholeMoveKeepsABackup(t *testing.T) {
 	write(t, old, mine)
 	targetByID("pi")
 	bs, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "pi", "mcp.json"))
-	if len(bs) != 1 {
-		t.Fatalf("backups of mcp.json: %v", bs)
-	}
-	if got := read(t, bs[0]); got != mine {
-		t.Errorf("backup: %q, want the user's %q", got, mine)
+	if len(bs) != 0 {
+		t.Errorf("migration created snapshots of mcp.json: %v", bs)
 	}
 	if exists(old) {
 		if piServers(t, old)["demo"] == nil {
@@ -360,7 +356,7 @@ func TestPiMCPWholeMoveKeepsABackup(t *testing.T) {
 // it (core/package-manager.js resolve). Pi's own MCP reads mcp.json, and
 // the Library's servers go there, not to mcp-adapter.json; the user's
 // mcp.json stays where it is, and what an earlier magpie moved into
-// mcp-adapter.json comes back, both files backed up first.
+// mcp-adapter.json comes back without persistent snapshots.
 func TestPiMCPUnloadedAdapter(t *testing.T) {
 	for _, v := range []string{"1.0.3", ""} {
 		t.Run("pi "+v, func(t *testing.T) {
@@ -381,8 +377,8 @@ func TestPiMCPUnloadedAdapter(t *testing.T) {
 				t.Errorf("mcp.json: %s", read(t, native))
 			}
 			for _, f := range []string{"mcp.json", "mcp-adapter.json"} {
-				if bs, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "pi", f)); len(bs) != 1 {
-					t.Errorf("backups of %s: %v", f, bs)
+				if bs, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "pi", f)); len(bs) != 0 {
+					t.Errorf("migration created snapshots of %s: %v", f, bs)
 				}
 			}
 			ok(t)(SaveServer("", Server{Name: "fs", Transport: "stdio", Command: "npx", Args: []string{"-y", "fs"}, Agents: []string{"pi"}}))

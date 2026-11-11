@@ -709,8 +709,8 @@ func TestInstructions(t *testing.T) {
 	if _, err := os.Stat(cx); !os.IsNotExist(err) {
 		t.Error("codex's AGENTS.md, only magpie's, is still there")
 	}
-	if es, _ := os.ReadDir(BackupDir()); len(es) == 0 {
-		t.Error("nothing was backed up")
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("instruction edits created snapshots: %v, %v", es, err)
 	}
 }
 
@@ -1380,8 +1380,8 @@ func TestDsh(t *testing.T) {
 	if strings.Count(s, "serverName") != 3 {
 		t.Errorf("web profile:\n%s", s)
 	}
-	if es, _ := os.ReadDir(BackupDir()); len(es) == 0 {
-		t.Error("nothing was backed up")
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("dsh edits created snapshots: %v, %v", es, err)
 	}
 
 	// off again: magpie's inserts go, the user's stay

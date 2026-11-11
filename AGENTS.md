@@ -15,6 +15,18 @@
   export, request archives, local backup features and file-export features
   removed. Legacy settings must not reactivate them. Preserve existing user
   data; removing a feature does not authorize deleting its saved files.
+- Official partner lists and logos may be fetched only through an explicit
+  user action. Keep startup, scheduled and lazy-read fetching disabled.
+- Keep plugin and Bun runtime auto-upgrades, missing-plugin background repair
+  and automatic provider migrations disabled. Preserve explicit controls.
+- Do not create persistent recovery duplicates (`.bak`, `.bad-*`, `.broken`,
+  `.before-magpie` or Library snapshots), or prune existing ones. A damaged
+  original blocks writes until explicit repair. Atomic temporary files and
+  moves that preserve a unique original remain allowed.
+- Keep billion-context native plugin installation disabled while its
+  installer creates recovery copies. Legacy disconnect uses local controlled
+  undo and preserves old state and sidecars. URL lanes may reuse a daemon
+  started by the user; magpie must not launch, restart or stop that daemon.
 - Keep fork builds on non-release versions so upstream auto-updates cannot
   replace the fork. Publishing or merging is separate from creating a PR.
 
@@ -75,18 +87,19 @@ Two cases decide it:
   deprecated built-in: the Add sheet leaves one with no account out
   (`unusedSub` in app.js), so it is installed from the Plugins page. A user
   who installs the plugin themselves is moved too
-  (`provider.HandOver`): at once when the built-in has no accounts, from the
-  gateway's hourly loop (`KeepRetiringMoved`) when it has, unless the
-  plugin is signed in under its own `-plugin` id already. Until
+  (`provider.HandOver`): at once when the built-in has no accounts, unless
+  the plugin is signed in under its own `-plugin` id already. Existing
+  built-in accounts require an explicit move in this fork; the gateway's
+  migration loop (`KeepRetiringMoved`) is disabled. Until
   then the Add sheet shows the plugin's tile only (`replacedSub` in app.js).
-  Since 10-16 the built-ins are being retired: the hourly loop's
-  `MoveRetiring` moves every subscription with a mover that still has
+  Since 10-16 the built-ins are being retired: an explicit
+  `MoveRetiring` call moves every subscription with a mover that still has
   built-in accounts, a user who moved back included, and there is no way
   back. Turning the plugin off turns the subscription off with it; removing
   it records `removed` (accounts kept with the plugin's sign-ins), and
   installing it again gives the subscription back.
 - **Not moved:** the user still has accounts from the built-in: the move
-  hasn't run yet, or it failed (tried again after six hours). Nothing
+  hasn't run yet, or it failed (retried only on explicit action in this fork). Nothing
   serves them until it runs.
 - **Retired:** the built-in's code is gone (`retiredBuiltins` in
   `internal/provider/migrate.go`; `provider.BuiltinRetired(id)`). The
@@ -114,8 +127,8 @@ plugin:
    [magpie-community/plugins](https://github.com/magpie-community/plugins)
    (`packages/<name>`, provider id = the built-in's id; checked out locally
    at `~/workspace/projects/magpie-commuity-plugins`). Publish a new version.
-3. Raise the mover's `min` to that version. `keepMovedCurrent` then updates
-   every moved user's plugin.
+3. Raise the mover's `min` to that version. Users of this fork update their
+   plugin explicitly (`keepMovedCurrent` is disabled).
 
 This magpie-side code still runs for moved subscriptions:
 

@@ -121,11 +121,6 @@ func (l *Library) takeEdits(targets []*Target, res *Result) {
 		}
 		if won == 0 {
 			e := edits[0]
-			// the library's as it was, kept with the backups
-			if _, err := keepLibrarySkill(s.Name, lib); err != nil {
-				res.fail(e.agent, "skill:"+s.Name, err)
-				continue
-			}
 			err := mirrorDir(e.path, lib)
 			delete(l.hashes, s.Name)
 			if err != nil {
@@ -195,16 +190,6 @@ func changedAt(dir string) (time.Time, error) {
 
 func skipInSkill(name string) bool {
 	return name == marker || name == ".git" || name == ".DS_Store"
-}
-
-// keepLibrarySkill copies the library's skill to the backups before an
-// edit is taken over it.
-func keepLibrarySkill(name, lib string) (string, error) {
-	dst := filepath.Join(BackupDir(), time.Now().Format("2006-01-02_15-04-05.000"), "library", "skills", name)
-	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return "", err
-	}
-	return dst, copyDir(lib, dst)
 }
 
 // mirrorDir makes the folder to hold what from does: its files written

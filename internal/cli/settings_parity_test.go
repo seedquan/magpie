@@ -414,6 +414,7 @@ var notYet = map[string]string{
 	"POST /api/login/{action}":                   P,  // providers.go
 	"POST /api/open":                             W,  // providers.go
 	"POST /api/partner":                          P,  // providers.go
+	"POST /api/partners/refresh":                 P,  // providers.go: explicit partner-list fetch
 	"POST /api/providers/arrange":                W,  // providers.go
 	"POST /api/signin":                           P,  // providers.go
 	"POST /api/signin/{id}/callback":             P,  // providers.go

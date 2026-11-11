@@ -39,7 +39,7 @@ func TestStashKeepsChangesMadeAtOnce(t *testing.T) {
 // A stash.json that doesn't parse is read as no stash, and the next change
 // writes over it: what it held, every agent's originals, is copied aside
 // first, so it can still be got back.
-func TestUnreadStashKeptAside(t *testing.T) {
+func TestUnreadStashLeftIntact(t *testing.T) {
 	stashHome(t)
 	p := stashPath()
 	os.MkdirAll(filepath.Dir(p), 0o755)
@@ -48,20 +48,20 @@ func TestUnreadStashKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	stash(map[string]string{"pi.was": "x"})
-	if got := stashLoad(); got["pi.was"] != "x" {
+	if got := stashLoad(); got["pi.was"] != "" {
 		t.Fatalf("stash after the change: %v", got)
 	}
 	bad, _ := filepath.Glob(p + ".bad-*")
-	if len(bad) != 1 {
+	if len(bad) != 0 {
 		t.Fatalf("kept aside: %v", bad)
 	}
-	if b, _ := os.ReadFile(bad[0]); string(b) != half {
+	if b, _ := os.ReadFile(p); string(b) != half {
 		t.Fatalf("kept aside as %q", b)
 	}
 	// a stash that parses is written over as before, nothing more kept
 	forget("pi.was")
-	if more, _ := filepath.Glob(p + ".bad-*"); len(more) != 1 {
-		t.Fatalf("kept aside after a good write: %v", more)
+	if more, _ := filepath.Glob(p + ".bad-*"); len(more) != 0 {
+		t.Fatalf("recovery sidecars after a good write: %v", more)
 	}
 	if fi, err := os.Stat(p); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestUnreadStashKeptAside(t *testing.T) {
 // stashLoad reads a stash.json that is valid JSON but not the stash's map
 // (an array) as empty too: it is kept aside like one cut short, not taken
 // as a stash because json.Valid passes it (#2263).
-func TestUnreadStashArrayKeptAside(t *testing.T) {
+func TestUnreadStashArrayLeftIntact(t *testing.T) {
 	stashHome(t)
 	p := stashPath()
 	os.MkdirAll(filepath.Dir(p), 0o755)
@@ -82,10 +82,10 @@ func TestUnreadStashArrayKeptAside(t *testing.T) {
 	}
 	stash(map[string]string{"pi.was": "x"})
 	bad, _ := filepath.Glob(p + ".bad-*")
-	if len(bad) != 1 {
+	if len(bad) != 0 {
 		t.Fatalf("kept aside: %v", bad)
 	}
-	if b, _ := os.ReadFile(bad[0]); string(b) != `[]` {
+	if b, _ := os.ReadFile(p); string(b) != `[]` {
 		t.Fatalf("kept aside as %q", b)
 	}
 }

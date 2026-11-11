@@ -1,18 +1,13 @@
 package plugin
 
-// Plugin updates, as magpie keeps itself up to date: the community's
-// plugins (@magpie-community/*, the ones the built-in subscriptions move
-// onto) update by themselves, a little after magpie starts and every hour; anyone else's new version waits for the reader, who sees a dot
-// on Plugins and updates it with a click. A plugin pinned to a version
-// stays on it. Updating never cuts a reply streaming through a plugin:
-// the host it runs on finishes it (see Restart).
+// Plugin update checks only report available versions. Installing an update
+// requires an explicit Update or Upgrade; background maintenance is disabled.
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,9 +29,9 @@ import (
 type Updates struct {
 	Checked time.Time `json:"checked"`
 	// Waiting are the plugins with a newer version that magpie leaves to
-	// the reader: someone else's, or one pinned to a version.
+	// the reader, including official packages and pinned versions.
 	Waiting []Waiting `json:"waiting"`
-	// Updated are the plugins magpie updated by itself, the latest last.
+	// Updated retains historical automatic-update records; this fork adds none.
 	Updated []Updated `json:"updated"`
 }
 
@@ -52,7 +47,7 @@ type Waiting struct {
 	Git     bool   `json:"git,omitempty"`
 }
 
-// Updated is a plugin magpie updated by itself.
+// Updated is a historical automatic-update record.
 type Updated struct {
 	Package string    `json:"package"`
 	From    string    `json:"from"`
@@ -61,19 +56,11 @@ type Updated struct {
 }
 
 const (
-	// updateEvery is how often magpie looks for plugin updates: a fix to a
-	// community plugin reaches its users within the hour (one look at npm's
-	// metadata for the plugins installed; six hours left someone told of a
-	// fix installing it by hand, #681)
-	updateEvery = time.Hour
-	// bunEvery is how often magpie looks for a newer Bun
-	bunEvery = 6 * time.Hour
 	// keepUpdated is how many updates magpie remembers making
 	keepUpdated = 20
 )
 
-// Official is whether the package is the community's, magpie's own,
-// which magpie keeps up to date by itself.
+// Official is whether the package is published by the magpie community.
 func Official(pkg string) bool { return strings.HasPrefix(pkg, "@magpie-community/") }
 
 // Pinned is whether spec names a version (or a range or a tag other than
@@ -102,9 +89,6 @@ var (
 		}
 		return out
 	}
-	// installNewest installs the version of the package npm has as its
-	// newest (installAt; tests stub it)
-	installNewest = installAt
 )
 
 func updatesPath() string { return filepath.Join(settings.Dir(), "plugin-updates.json") }
@@ -118,9 +102,8 @@ func readUpdates() Updates {
 }
 
 // writeUpdates writes b as plugin-updates.json. readUpdates reads a file
-// that doesn't parse as no updates, and Updated, the plugins magpie updated
-// by itself, can't be found again: such a file is kept aside first, and
-// one that can't be isn't written over.
+// that does not parse as no updates. An unreadable existing file blocks
+// writes and stays intact; no recovery copy is created.
 func writeUpdates(b []byte) error {
 	if err := lastgood.KeepUnparsed(updatesPath(), lastgood.Into[Updates]); err != nil {
 		return err
@@ -204,10 +187,8 @@ func LastUpdated(pkg string, since time.Time) (Updated, bool) {
 	return Updated{}, false
 }
 
-// CheckUpdates asks npm for each plugin's newest version, updates the
-// community's (unpinned, switched on) to it and notes the others' as
-// waiting. The plugins updated are loaded again, a reply streaming
-// through the old ones finishing first.
+// CheckUpdates reports newer versions as waiting. It never installs code,
+// including unpinned community packages, or restarts the plugin host.
 func CheckUpdates(ctx context.Context) (Updates, error) {
 	var es, gits []Entry
 	var names []string
@@ -226,8 +207,6 @@ func CheckUpdates(ctx context.Context) (Updates, error) {
 		latest = latestOf(ctx, names)
 	}
 	var waiting []Waiting
-	var made []Updated
-	var errs []error
 	// a git one waits for the reader whoever's it is: its repository's
 	// newest commit is nobody's release
 	for _, e := range gits {
@@ -240,28 +219,12 @@ func CheckUpdates(ctx context.Context) (Updates, error) {
 		if e.Off || have == "" || now == "" || !update.Newer(now, have) {
 			continue
 		}
-		if !Official(pkg) || Pinned(e.Spec) {
-			waiting = append(waiting, Waiting{Spec: e.Spec, Package: pkg, Version: have, Latest: now})
-			continue
-		}
-		if err := installNewest(ctx, pkg, now); err != nil {
-			errs = append(errs, err)
-			log.Printf("updating the plugin %s: %s", pkg, err)
-			waiting = append(waiting, Waiting{Spec: e.Spec, Package: pkg, Version: have, Latest: now})
-			continue
-		}
-		v := Installed(e.Spec)
-		if v == "" {
-			v = now
-		}
-		made = append(made, Updated{Package: pkg, From: have, To: v, At: time.Now().UTC().Truncate(time.Second)})
-		log.Printf("updated the plugin %s from %s to %s", pkg, have, v)
+		waiting = append(waiting, Waiting{Spec: e.Spec, Package: pkg, Version: have, Latest: now})
 	}
 	updatesMu.Lock()
 	u := readUpdates()
 	u.Checked = time.Now().UTC().Truncate(time.Second)
 	u.Waiting = waiting
-	u.Updated = append(u.Updated, made...)
 	if n := len(u.Updated); n > keepUpdated {
 		u.Updated = u.Updated[n-keepUpdated:]
 	}
@@ -271,12 +234,6 @@ func CheckUpdates(ctx context.Context) (Updates, error) {
 		}
 	}
 	updatesMu.Unlock()
-	if len(made) > 0 {
-		Restart()
-	}
-	if len(errs) > 0 {
-		return u, errs[0]
-	}
 	return u, nil
 }
 
@@ -311,29 +268,9 @@ func InstallMissing(ctx context.Context) (int, error) {
 	return n, errors.Join(errs...)
 }
 
-// KeepUpdated looks for plugin updates a little after magpie starts, then
-// every updateEvery, run by the magpie serving the gateway (one magpie,
-// never two at once).
-func KeepUpdated(ctx context.Context) {
-	t := time.NewTimer(30 * time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		if len(Load().Plugins) > 0 {
-			cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-			if n, err := InstallMissing(cctx); n > 0 || err != nil {
-				log.Printf("installed %d missing plugins again: %v", n, err)
-			}
-			_, _ = CheckUpdates(cctx)
-			cancel()
-		}
-		t.Reset(updateEvery)
-	}
-}
+// KeepUpdated is permanently disabled, including missing-package repair.
+// Manual installs, checks and updates remain available.
+func KeepUpdated(context.Context) {}
 
 // VersionCheck is what asking npm now found of one installed plugin.
 type VersionCheck struct {
@@ -361,8 +298,7 @@ type VersionCheck struct {
 	// because GitHub's rate limit was used up, for the page to say so in
 	// its own words, as the library's skills do (#1942)
 	Limited *GitHubLimit `json:"limited,omitempty"`
-	// Auto is whether magpie updates it by itself (the community's,
-	// unpinned, switched on), so an update found would come anyway
+	// Auto is retained for API compatibility and is always false in this fork.
 	Auto bool `json:"auto"`
 	Off  bool `json:"off"`
 }
@@ -396,7 +332,6 @@ func CheckNow(ctx context.Context) VersionChecks {
 	sem := make(chan struct{}, npmAtOnce)
 	for i, e := range es {
 		c := VersionCheck{Spec: e.Spec, Package: Name(e.Spec), Version: Installed(e.Spec), Off: e.Off}
-		c.Auto = Official(c.Package) && !Pinned(e.Spec) && !e.Off
 		switch {
 		case IsPath(e.Spec):
 			c.Status = "folder"

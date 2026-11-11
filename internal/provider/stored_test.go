@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,12 +82,56 @@ func TestStoredParsedOnceUntilTheFileChanges(t *testing.T) {
 		t.Fatal("the provider another process renamed is not found")
 	}
 
-	// a file that doesn't decode is read as load reads it: its last good
-	// generation, not none
-	if err := os.WriteFile(Path(), make([]byte, len(edited)), 0o600); err != nil {
+	// No recovery copy is created by a save. Without a legacy copy, a
+	// damaged file is unknown and must stay untouched until explicit repair.
+	if _, err := os.Stat(Path() + ".bak"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("saving providers created a recovery copy")
+	}
+	damaged := make([]byte, len(edited))
+	if err := os.WriteFile(Path(), damaged, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := storedPicks("r3"); !ok {
-		t.Fatal("a broken providers.json is read as no providers")
+	if _, ok := storedPicks("r3"); ok {
+		t.Fatal("a provider was returned from a damaged file without a legacy copy")
+	}
+	if err := FileError(); !errors.Is(err, ErrUnreadable) {
+		t.Fatal("a damaged providers file wasn't reported as unreadable")
+	}
+	p.Name = "changed while damaged"
+	if err := Save(p); !errors.Is(err, ErrUnreadable) {
+		t.Fatal("saving over a damaged providers file wasn't refused")
+	}
+	if after, err := os.ReadFile(Path()); err != nil || !bytes.Equal(after, damaged) {
+		t.Fatal("saving changed or lost the damaged providers file")
+	}
+	if copies, err := filepath.Glob(Path() + "*"); err != nil || len(copies) != 1 {
+		t.Fatal("saving a damaged providers file created a recovery copy")
+	}
+
+	// A legacy backup is still readable, but does not permit overwriting
+	// the damaged original or modifying that legacy backup.
+	if err := os.WriteFile(Path()+".bak", b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := storedPicks("r29"); !ok {
+		t.Fatal("the provider in the legacy backup wasn't read")
+	}
+	if _, ok := storedPicks("r9x"); ok {
+		t.Fatal("the cached renamed provider stood in for the legacy backup")
+	}
+	if err := FileError(); err != nil {
+		t.Fatal("the explicitly seeded legacy backup wasn't readable")
+	}
+	if err := Save(p); err == nil {
+		t.Fatal("a legacy backup allowed saving over the damaged original")
+	}
+	if after, err := os.ReadFile(Path()); err != nil || !bytes.Equal(after, damaged) {
+		t.Fatal("saving with a legacy backup changed or lost the damaged original")
+	}
+	if after, err := os.ReadFile(Path() + ".bak"); err != nil || !bytes.Equal(after, b) {
+		t.Fatal("saving changed or lost the legacy backup")
+	}
+	if copies, err := filepath.Glob(Path() + "*"); err != nil || len(copies) != 2 {
+		t.Fatal("saving with a legacy backup created another recovery copy")
 	}
 }

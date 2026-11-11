@@ -24,6 +24,10 @@ func TestZeroedLoginsReadFromBackup(t *testing.T) {
 		if err := addGoogleLogin("antigravity", u, "", googleAuth{RefreshToken: "1//" + u, Project: "p"}); err != nil {
 			t.Fatal(err)
 		}
+		if u == "b@x.com" {
+			b, _ := os.ReadFile(loginsPath())
+			os.WriteFile(lastgood.Bak(loginsPath()), b, 0o600)
+		}
 	}
 	p := loginsPath()
 	if _, err := os.Stat(lastgood.Bak(p)); err != nil {
@@ -52,25 +56,24 @@ func TestZeroedLoginsReadFromBackup(t *testing.T) {
 	if n := lastgood.Recovered(); len(n) != 1 || n[0].File != "logins.json" || !strings.Contains(n[0].Why, "10783 bytes") {
 		t.Fatalf("the user isn't told: %+v", n)
 	}
-	// the next account added keeps them, and the zeroed file aside
-	if err := addGoogleLogin("antigravity", "d@x.com", "", googleAuth{RefreshToken: "1//d", Project: "p"}); err != nil {
-		t.Fatal(err)
+	if err := addGoogleLogin("antigravity", "d@x.com", "", googleAuth{RefreshToken: "synthetic", Project: "p"}); err == nil {
+		t.Fatal("overwrote damaged credentials")
 	}
-	if got := users(); got != "a@x.com,b@x.com,d@x.com" {
-		t.Fatalf("after an account added: %q", got)
+	if got := users(); got != "a@x.com,b@x.com" {
+		t.Fatal("legacy fallback changed")
 	}
-	kept, _ := filepath.Glob(p + ".bad-*")
-	if len(kept) != 1 {
-		t.Fatalf("the zeroed file not kept aside: %v", kept)
+	if kept, _ := filepath.Glob(p + ".bad-*"); len(kept) != 0 {
+		t.Fatal("created recovery copies")
 	}
-	if b, _ := os.ReadFile(kept[0]); !bytes.Equal(b, make([]byte, 10783)) {
-		t.Fatalf("kept %d bytes", len(b))
+	if b, _ := os.ReadFile(p); !bytes.Equal(b, make([]byte, 10783)) {
+		t.Fatal("damaged original changed")
 	}
+
 }
 
 // With no backup, a zeroed logins.json is copied aside before an account
 // added writes over it.
-func TestZeroedLoginsWithoutBackupKeptAside(t *testing.T) {
+func TestZeroedLoginsWithoutBackupLeftIntact(t *testing.T) {
 	googleSandbox(t, &fakeGoogle{})
 	lastgood.Reset()
 	t.Cleanup(lastgood.Reset)
@@ -80,10 +83,10 @@ func TestZeroedLoginsWithoutBackupKeptAside(t *testing.T) {
 	lastLoginsMu.Lock()
 	lastLogins, loginsKnown = nil, false
 	lastLoginsMu.Unlock()
-	if err := addGoogleLogin("antigravity", "new@x.com", "", googleAuth{RefreshToken: "1//n", Project: "p"}); err != nil {
-		t.Fatal(err)
+	if err := addGoogleLogin("antigravity", "new@x.com", "", googleAuth{RefreshToken: "1//n", Project: "p"}); err == nil {
+		t.Fatal("damaged credentials overwritten")
 	}
-	if kept, _ := filepath.Glob(p + ".bad-*"); len(kept) != 1 {
+	if kept, _ := filepath.Glob(p + ".bad-*"); len(kept) != 0 {
 		t.Fatalf("the zeroed file not kept aside: %v", kept)
 	}
 	if _, err := os.Stat(lastgood.Bak(p)); err == nil {
@@ -103,6 +106,8 @@ func TestZeroedMigrationsReadFromBackup(t *testing.T) {
 		}
 	}
 	p := migrationsPath()
+	legacy, _ := os.ReadFile(p)
+	os.WriteFile(lastgood.Bak(p), legacy, 0o600)
 	os.WriteFile(p, make([]byte, 4096), 0o600)
 	if !Moved("zed") {
 		t.Fatal("a zeroed migrations.json read as zed not moved")
@@ -118,6 +123,8 @@ func TestZeroedProvidersReadFromBackup(t *testing.T) {
 	lastgood.Reset()
 	t.Cleanup(lastgood.Reset)
 	writeProviderFile(t, originalProviderFile)
+	legacy, _ := os.ReadFile(Path())
+	os.WriteFile(lastgood.Bak(Path()), legacy, 0o600)
 	if err := Save(Provider{ID: "new", Name: "New", Chat: "https://new.example.invalid/v1", Key: "synthetic-new"}); err != nil {
 		t.Fatal(err)
 	}

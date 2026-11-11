@@ -32,7 +32,7 @@ func TestUpdateAutoKeepsCorruptSettings(t *testing.T) {
 	}
 }
 
-func TestUpdateAutoRecoversEmptySettings(t *testing.T) {
+func TestUpdateAutoKeepsEmptySettings(t *testing.T) {
 	for _, body := range []string{"", " \t\r\n", "\ufeff \t\r\n"} {
 		t.Run(body, func(t *testing.T) {
 			groupsHome(t)
@@ -42,11 +42,11 @@ func TestUpdateAutoRecoversEmptySettings(t *testing.T) {
 			if err := os.WriteFile(settings.Path(), []byte(body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := updateCmd([]string{"update", "auto", "off"}); err != nil {
-				t.Fatal(err)
+			if err := updateCmd([]string{"update", "auto", "off"}); err == nil {
+				t.Error("the command reported success with empty settings")
 			}
-			if !settings.Load().NoAutoUpdate {
-				t.Fatal("the update preference was not saved")
+			if after, err := os.ReadFile(settings.Path()); err != nil || !bytes.Equal(after, []byte(body)) {
+				t.Errorf("the command overwrote the empty settings: %v", err)
 			}
 		})
 	}

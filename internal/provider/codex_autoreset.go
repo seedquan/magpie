@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 )
@@ -283,7 +284,6 @@ func (a *autoResets) load() {
 	if errors.Is(err, fs.ErrNotExist) {
 		return
 	}
-	kept := false
 	if err == nil {
 		if err = json.Unmarshal(b, &a.spent); err == nil {
 			if a.spent == nil {
@@ -291,13 +291,7 @@ func (a *autoResets) load() {
 			}
 			return
 		}
-		aside := a.path + ".bad-" + time.Now().UTC().Format("20060102T150405.000000000")
-		if werr := os.WriteFile(aside, b, 0o600); werr != nil {
-			err = fmt.Errorf("%w; keeping it aside: %v", err, werr)
-		} else {
-			kept = true
-			err = fmt.Errorf("%w; kept aside as %s", err, aside)
-		}
+
 	}
 	if a.spent == nil {
 		a.spent = map[string]autoResetSpent{}
@@ -316,9 +310,6 @@ func (a *autoResets) load() {
 			a.spent[key] = autoResetSpent{Until: u.At.Add(autoResetWeek), At: u.At, Out: ResetOutcome{Code: "reset", Windows: u.Windows}}
 		}
 		log.Printf("%s: %v; what was spent is taken from %s", a.path, err, resetsUsedPath())
-	}
-	if kept {
-		a.save()
 	}
 }
 
@@ -339,6 +330,10 @@ func (a *autoResets) save() {
 		if now.After(s.Until) {
 			delete(a.spent, k)
 		}
+	}
+	if err := lastgood.KeepUnparsed(a.path, lastgood.Into[map[string]autoResetSpent]); err != nil {
+		log.Printf("%s: %v", a.path, err)
+		return
 	}
 	b, _ := json.MarshalIndent(a.spent, "", "  ")
 	_ = os.MkdirAll(settings.Dir(), 0o755)

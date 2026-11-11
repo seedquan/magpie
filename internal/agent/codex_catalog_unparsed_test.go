@@ -1,20 +1,15 @@
 package agent
 
 import (
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// A magpie-models.json that doesn't parse is kept aside before magpie
-// writes its list over the file or takes the file away: Keep (#1450) can
-// hold nothing of a file it can't read, so the keys the user added by hand
-// would end with no copy — the rule the other state files were given
-// (#2263), which this file missed.
-func TestUnparsedCodexCatalogKeptAside(t *testing.T) {
+// A malformed magpie-models.json is left intact by sync and disconnect,
+// with no new recovery copies. Disconnect may still remove the wiring.
+func TestUnparsedCodexCatalogLeftIntact(t *testing.T) {
 	home, _ := codexHome(t, "", "")
 	list := filepath.Join(home, ".codex", "magpie-models.json")
 	cx := codex(home)
@@ -31,23 +26,14 @@ func TestUnparsedCodexCatalogKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	SyncCatalog()
-	if !strings.Contains(readFile(list), `"added/m2"`) {
-		t.Fatal("sync didn't write the new model")
+	if readFile(list) != string(b[:len(b)-2]) {
+		t.Fatal("sync overwrote damaged catalog")
 	}
-	if bad, _ := filepath.Glob(list + ".bad-*"); len(bad) == 0 {
-		t.Fatalf("the unparsed list was written over with no copy kept")
+	_ = cx.Fields[0].Set("")
+	if readFile(list) != string(b[:len(b)-2]) {
+		t.Fatal("damaged catalog changed")
 	}
-
-	// the list broken again, and magpie steps out: the file goes, but a
-	// copy of what it held stays
-	writeFile(t, list, b[:len(b)-2])
-	if err := cx.Fields[0].Set(""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(list); err == nil {
-		t.Error("a list magpie steps out of stayed")
-	}
-	if bad, _ := filepath.Glob(list + ".bad-*"); len(bad) == 0 {
-		t.Fatalf("the unparsed list was removed with no copy kept")
+	if bad, _ := filepath.Glob(list + ".bad-*"); len(bad) != 0 {
+		t.Fatal("recovery copies generated")
 	}
 }

@@ -46,14 +46,17 @@ func TestLinkedSet(t *testing.T) {
 		t.Errorf("a change in the file didn't reach codex:\n%s", s)
 	}
 
-	// the page's text goes into the file, the file kept aside first
+	// the page's text goes into the file without a persistent snapshot
 	page := "Written on the page."
 	res := ok(t)(SaveInstructions(InstructionsChange{Texts: map[string]*string{"agents": &page}}))
 	if s := read(t, shared); s != page+"\n" {
 		t.Errorf("the file has %q", s)
 	}
-	if res.Backup == "" || !strings.Contains(read(t, filepath.Join(res.Backup, "library", "AGENTS.md")), "edited by hand") {
-		t.Errorf("the file wasn't kept aside before it was written: %q", res.Backup)
+	if res.Backup != "" {
+		t.Errorf("the edit reported a snapshot: %q", res.Backup)
+	}
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("the edit created snapshots: %v, %v", es, err)
 	}
 	if s := read(t, cx); !strings.Contains(s, page) {
 		t.Errorf("codex:\n%s", s)

@@ -1101,58 +1101,16 @@ func pluginReady(mv *mover) bool {
 	return false
 }
 
-// keepMovedCurrent updates the plugin of each built-in moved onto one to
-// the version its move needs, when older: a built-in came up to date with
-// magpie, and its plugin does too. One turned off or run from a folder is
-// left as it is.
-func keepMovedCurrent(ctx context.Context) {
-	for _, id := range OnPlugins() {
-		mv := movers[id]
-		if mv.min == "" {
-			continue
-		}
-		if err := installPlugin(ctx, mv.pkg, mv.min); err != nil {
-			log.Printf("updating %s's plugin: %s", id, err)
-		}
-	}
-}
+// keepMovedCurrent is disabled: a migrated provider never upgrades its
+// plugin behind the user's back. An explicit Move or Update may install it.
+func keepMovedCurrent(context.Context) {}
 
-// KeepRetiringMoved moves the built-ins being retired, and hands over
-// those whose plugin the user installed (HandOver), run by the magpie
-// serving the gateway (one magpie, never two at once): a little after it
-// starts, then every hour, so a failed move is tried again once retryWait
-// has gone; a retired built-in's failed move brings the next run forward
-// to when it is due. It also keeps each moved built-in's plugin up to date.
-func KeepRetiringMoved(ctx context.Context) {
-	t := time.NewTimer(20 * time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		if settings.AccountDiscoveryOff() {
-			t.Reset(time.Hour)
-			continue
-		}
-		keepMovedCurrent(ctx)
-		moves := MoveRetiring(ctx)
-		maps.Copy(moves, HandOver(ctx, true))
-		for id, err := range moves {
-			if err != nil {
-				log.Printf("moving %s to its plugin: %s (nothing serves it until it moves)", id, err)
-			} else {
-				log.Printf("moved %s to its plugin, %s", id, MovePackage(id))
-			}
-		}
-		t.Reset(nextRetiringRun())
-	}
-}
+// KeepRetiringMoved is disabled: background moves can install or upgrade
+// plugins. Existing accounts wait for an explicit Move to plugin instead.
+func KeepRetiringMoved(context.Context) {}
 
-// nextRetiringRun is how long KeepRetiringMoved waits before it runs
-// again: an hour, or less when a retired built-in's failed move is due
-// sooner.
+// nextRetiringRun retains the legacy scheduling calculation for compatibility
+// tests. No background loop uses it in this fork.
 func nextRetiringRun() time.Duration {
 	next := time.Hour
 	for _, id := range MovableIDs() {

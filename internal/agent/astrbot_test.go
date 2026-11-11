@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -255,22 +256,22 @@ func TestAstrBot(t *testing.T) {
 			t.Fatalf("the user's entry changed or moved:\n%s\nin\n%s", own, b)
 		}
 	}
-	if bk, err := os.ReadFile(path + ".before-magpie"); err != nil || string(bk) != astrbotConfig {
-		t.Fatalf("backup: %v\n%s", err, bk)
+	if _, err := os.Stat(path + ".before-magpie"); !os.IsNotExist(err) {
+		t.Fatalf("recovery copy created: %v", err)
 	}
 
 	// switching between magpie's models keeps what AstrBot was on before
-	// magpie, and leaves the backup as it was
+	// magpie, without creating a recovery copy
 	if err := a.Pick("model", "magpie/kimi/k2-vision"); err != nil {
 		t.Fatal(err)
 	}
-	if bk, _ := os.ReadFile(path + ".before-magpie"); string(bk) != astrbotConfig {
-		t.Fatalf("the backup was written over:\n%s", bk)
+	if _, err := os.Stat(path + ".before-magpie"); !os.IsNotExist(err) {
+		t.Fatalf("recovery copy created on a model change: %v", err)
 	}
 	if err := a.Disconnect(); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := os.ReadFile(path); string(got) != astrbotConfig {
+	if got, _ := os.ReadFile(path); !sameJSONText(t, string(edit.TrimBOM(got)), string(edit.TrimBOM([]byte(astrbotConfig)))) {
 		t.Fatalf("Disconnect left:\n%s", got)
 	}
 	if a.Wired() {
@@ -346,7 +347,7 @@ func TestAstrBotNoModelPutsTheirsBack(t *testing.T) {
 	if err := a.Field("model").Set(""); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := os.ReadFile(path); string(got) != astrbotConfig {
+	if got, _ := os.ReadFile(path); !sameJSONText(t, string(edit.TrimBOM(got)), string(edit.TrimBOM([]byte(astrbotConfig)))) {
 		t.Fatalf("left:\n%s", got)
 	}
 }

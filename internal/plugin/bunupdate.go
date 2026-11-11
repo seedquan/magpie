@@ -1,13 +1,7 @@
 package plugin
 
-// Bun kept up to date, as the plugins are: every six hours magpie asks
-// GitHub for Bun's newest release and, once it has been out two days (a
-// release with a bad bug is usually followed by a fix within them),
-// downloads it, checks its checksum, tries it and switches the plugin
-// host to it, a reply streaming through the old host finishing first.
-// BunVersion is the floor: magpie never runs an older Bun. The Bun it ran
-// before stays on disk, and a new one the host won't start on is set
-// aside for the one before, never tried again.
+// Bun version checks and upgrades are manual in this fork. The background
+// scheduler stays disabled; runtime bootstrap still installs the fixed minimum.
 
 import (
 	"context"
@@ -298,25 +292,5 @@ func pruneBuns(s bunState) {
 	}
 }
 
-// KeepBunUpdated looks for a newer Bun a little after magpie starts, then
-// every bunEvery, while there are plugins to run on it.
-func KeepBunUpdated(ctx context.Context) {
-	t := time.NewTimer(2 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		if len(Load().Plugins) > 0 && HasBun() {
-			// no bound on the whole: a slow download still moving
-			// finishes, and one that stops sending is ended by
-			// downloadStall (#5572)
-			if _, err := CheckBun(ctx); err != nil {
-				log.Printf("plugins: looking for a newer Bun: %s", err)
-			}
-		}
-		t.Reset(bunEvery)
-	}
-}
+// KeepBunUpdated is disabled: runtime upgrades also require a manual check.
+func KeepBunUpdated(context.Context) {}

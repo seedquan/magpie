@@ -137,7 +137,9 @@ func TestUnreadableFileIsNeverWrittenOver(t *testing.T) {
 func TestCutShortFileReadFromItsBackup(t *testing.T) {
 	fresh(t)
 	save(t, "first", Fact, Global)
-	save(t, "second", Fact, Global) // keeps the first generation as .bak
+	old, _ := os.ReadFile(Path())
+	os.WriteFile(Path()+".bak", old, 0o600)
+	save(t, "second", Fact, Global)
 	if err := os.WriteFile(Path(), []byte(`{"memo`), 0o600); err != nil {
 		t.Fatal(err)
 	}

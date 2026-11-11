@@ -2237,10 +2237,11 @@ asks no other.
   therefore doesn't describe a conversation's history again. Only inline
   images are persisted: their keys come from their bytes, while a URL can
   later name different bytes and stays process-local. The private (0600)
-  file keeps the same 2048-entry LRU on reload; a JSON-malformed or
-  crash-truncated record is skipped without hiding the other records, and
-  is copied to a private `.broken-*` file before a later compaction drops
-  it. An inline description is counted from its creation until it has saved
+  file keeps the same 2048-entry LRU on reload. Reads stop at 32 MiB;
+  malformed, crash-truncated or oversized files stop persistence for that
+  server until explicit repair and restart, while readable records and new
+  descriptions remain usable in memory. The original bytes stay intact;
+  no `.broken-*` copy is created. An inline description is counted from its creation until it has saved
   or failed; gateway shutdown waits for that count to reach zero, so a
   canceled request's completed description isn't lost on exit. Appends and compaction
   are serialized across gateway processes by `vision-cache.jsonl.lock`;

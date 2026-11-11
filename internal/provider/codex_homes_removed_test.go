@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -54,13 +55,30 @@ func TestCodexHeldFolderAccountRemoved(t *testing.T) {
 		}
 	}
 
-	// unreadable, the record says nothing: the removed account isn't
-	// listed again on a guess
-	if err := os.WriteFile(codexAsidePath(), []byte("{"), 0o600); err != nil {
+	// A damaged record doesn't list the removed account on a guess, and
+	// refuses another write until the user explicitly repairs it.
+	record, err := os.ReadFile(codexAsidePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	damaged := []byte("{")
+	if err := os.WriteFile(codexAsidePath(), damaged, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if listed() {
 		t.Fatalf("with the record unreadable, the removed account came back")
+	}
+	if err := setCodexAside(backup, before); err == nil {
+		t.Fatal("a damaged removal record was accepted for replacement")
+	}
+	if after, err := os.ReadFile(codexAsidePath()); err != nil || !bytes.Equal(after, damaged) {
+		t.Fatal("the damaged removal record was changed or lost")
+	}
+	if copies, err := filepath.Glob(codexAsidePath() + "*"); err != nil || len(copies) != 1 {
+		t.Fatal("writing a damaged removal record created a recovery copy")
+	}
+	if err := os.WriteFile(codexAsidePath(), record, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if err := setCodexAside(backup, before); err != nil {
 		t.Fatal(err)

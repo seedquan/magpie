@@ -40,6 +40,16 @@ func TestLoadChecked(t *testing.T) {
 		if err := Save(Settings{AllowIPs: list}); err != nil {
 			t.Fatal(err)
 		}
+		if list[0] == "10.0.0.0/8" {
+			// Simulate a recovery file retained from an older version.
+			b, err := os.ReadFile(Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(lastgood.Bak(Path()), b, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	if s, err := LoadChecked(); err != nil || len(s.AllowIPs) != 1 || s.AllowIPs[0] != "198.51.100.7" {
 		t.Fatalf("a good file: %v %v", s.AllowIPs, err)

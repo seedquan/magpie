@@ -1397,8 +1397,8 @@ func homeDir(home, d string) string {
 	return filepath.Clean(d)
 }
 
-// beforeMagpie is a copy of an agent's own files taken before magpie first
-// writes them (file.before-magpie beside each), which Disconnect puts back
+// beforeMagpie reads copies older versions left of an agent's own files
+// (file.before-magpie beside each), which Disconnect can put back
 // byte for byte when what it left says the same as the copy: the same
 // JSON, in the user's own order, spacing and comments-free layout. Where
 // they differ (the user changed something while connected), what
@@ -1409,34 +1409,24 @@ type beforeMagpie struct {
 	files  []string
 }
 
-// take copies each file aside, or notes it absent; a file that can't be
-// read is neither, and isn't put back.
+// take notes absent files without creating, changing or deleting old copies.
 func (b beforeMagpie) take() {
 	var gone []string
 	for _, f := range b.files {
-		raw, err := os.ReadFile(f)
-		switch {
-		case err == nil:
-			if edit.WriteAtomic(f+".before-magpie", raw) != nil {
-				os.Remove(f + ".before-magpie")
-			}
-		case errors.Is(err, fs.ErrNotExist):
-			os.Remove(f + ".before-magpie")
+		if _, err := os.Stat(f); errors.Is(err, fs.ErrNotExist) {
 			gone = append(gone, filepath.Base(f))
-		default:
-			os.Remove(f + ".before-magpie")
 		}
 	}
 	stash(map[string]string{b.absent: strings.Join(gone, "\n")})
 }
 
-// restore puts back what take kept, where Disconnect left the same.
+// restore preserves an old snapshot's layout only when Disconnect left
+// the same values; absent-file markers can remove a newly created empty file.
 func (b beforeMagpie) restore() error {
 	gone := strings.Split(unstash(b.absent), "\n")
 	for _, f := range b.files {
 		cur, err := os.ReadFile(f)
 		if err != nil {
-			os.Remove(f + ".before-magpie")
 			continue
 		}
 		var now any
@@ -1450,7 +1440,6 @@ func (b beforeMagpie) restore() error {
 					return err
 				}
 			}
-			os.Remove(f + ".before-magpie")
 			continue
 		}
 		if slices.Contains(gone, filepath.Base(f)) && emptyJSON(now) {

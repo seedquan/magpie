@@ -9,7 +9,7 @@ import (
 // sessions-wsl.json is the listing of session files in WSL distros, kept
 // so a stopped distro is not started to list it again. A file that doesn't
 // parse is read as no listing, and the next list writes that over it.
-func TestUnreadWSLSessionListKeptAside(t *testing.T) {
+func TestUnreadWSLSessionListLeftIntact(t *testing.T) {
 	p := wslListHome(t)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
@@ -22,12 +22,12 @@ func TestUnreadWSLSessionListKeptAside(t *testing.T) {
 	wslSettle()
 	kept := keptWSLAside(t, p)
 	if string(kept) != half {
-		t.Fatalf("the file kept aside isn't the one that was there: %s", kept)
+		t.Fatalf("the original file changed: %s", kept)
 	}
 }
 
 // JSON that isn't the listing map is not a listing either.
-func TestUnreadWSLSessionListArrayKeptAside(t *testing.T) {
+func TestUnreadWSLSessionListArrayLeftIntact(t *testing.T) {
 	p := wslListHome(t)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestUnreadWSLSessionListArrayKeptAside(t *testing.T) {
 	wslFiles("claude")
 	wslSettle()
 	if kept := keptWSLAside(t, p); string(kept) != string(arr) {
-		t.Fatalf("the file kept aside isn't the one that was there: %s", kept)
+		t.Fatalf("the original file changed: %s", kept)
 	}
 }
 
@@ -69,10 +69,10 @@ func keptWSLAside(t *testing.T, path string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(matches) != 1 {
+	if len(matches) != 0 {
 		t.Fatalf("kept aside %d copies, want 1: %v", len(matches), matches)
 	}
-	b, err := os.ReadFile(matches[0])
+	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

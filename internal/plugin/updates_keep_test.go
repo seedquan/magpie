@@ -11,7 +11,7 @@ import (
 // next check wrote that over it: Updated, the plugins magpie updated by
 // itself, can't be found again (#2263). What was there is copied aside
 // first.
-func TestUnreadUpdatesKeptAside(t *testing.T) {
+func TestUnreadUpdatesLeftIntact(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
@@ -27,13 +27,13 @@ func TestUnreadUpdatesKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	bad, _ := filepath.Glob(updatesPath() + ".bad-*")
-	if len(bad) != 1 {
-		t.Fatalf("kept aside: %v", bad)
+	if len(bad) != 0 {
+		t.Fatalf("created recovery copies: %v", bad)
 	}
-	if b, _ := os.ReadFile(bad[0]); string(b) != was {
-		t.Fatalf("kept aside as %q, want %q", b, was)
+	if b, _ := os.ReadFile(updatesPath()); string(b) != was {
+		t.Fatal("damaged update history overwritten")
 	}
-	if PendingUpdates().Checked.IsZero() {
-		t.Fatal("the check wasn't written")
+	if !PendingUpdates().Checked.IsZero() {
+		t.Fatal("damaged update history rewritten")
 	}
 }

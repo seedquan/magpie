@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
-	"time"
 )
 
 // A read or backup that fails must stop a new sign-in from replacing the
@@ -49,7 +48,7 @@ func TestUnreadLoginsWriteErrorsKeepCredentials(t *testing.T) {
 				} else {
 					// the folder takes no new file, so the bad copy can't
 					// be made
-					blocked = p + ".bad-" + time.Now().Format("20060102-150405")
+					blocked = p
 					dir := filepath.Dir(p)
 					if err := os.Chmod(dir, 0o500); err != nil {
 						t.Fatal(err)
@@ -105,31 +104,31 @@ func TestUnreadLoginsFieldTypesKeptBeforeWrite(t *testing.T) {
 			lastLoginsMu.Lock()
 			lastLogins = nil // magpie just started: no previously read accounts
 			lastLoginsMu.Unlock()
-			if err := addGoogleLogin("antigravity", "new@example.com", "", googleAuth{RefreshToken: "new-refresh-token", Project: "p"}); err != nil {
-				t.Fatal(err)
+			if err := addGoogleLogin("antigravity", "new@example.com", "", googleAuth{RefreshToken: "new-refresh-token", Project: "p"}); err == nil {
+				t.Fatal("damaged credentials overwritten")
 			}
 			kept, err := filepath.Glob(p + ".bad-*")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(kept) != 1 {
+			if len(kept) != 0 {
 				t.Fatalf("unreadable saved accounts not kept before adding an account: %v", kept)
 			}
-			b, err := os.ReadFile(kept[0])
+			b, err := os.ReadFile(p)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if string(b) != tc.text {
 				t.Fatalf("backup = %q, want original credentials %q", b, tc.text)
 			}
-			if ls := readLogins(); len(ls) != 1 || ls[0].User != "new@example.com" {
+			if ls := readLogins(); len(ls) != 0 {
 				t.Fatalf("new account not saved: %v", ls)
 			}
 		})
 	}
 }
 
-func TestReadableLoginsNotKeptAside(t *testing.T) {
+func TestReadableLoginsNotLeftIntact(t *testing.T) {
 	googleSandbox(t, &fakeGoogle{})
 	for _, u := range []string{"a@x.com", "b@x.com"} {
 		if err := addGoogleLogin("antigravity", u, "", googleAuth{RefreshToken: "1//" + u, Project: "p"}); err != nil {
@@ -172,38 +171,24 @@ func TestUnreadLoginsNotWrittenOver(t *testing.T) {
 		return us
 	}
 
-	// a read that fails: the accounts read before are kept
-	os.WriteFile(p, good[:len(good)/2], 0o600)
-	if us := users(); strings.Join(us, ",") != "a@x.com,b@x.com" {
-		t.Fatalf("a logins.json half there read as %v", us)
-	}
-	if err := addGoogleLogin("antigravity", "c@x.com", "", googleAuth{RefreshToken: "1//c", Project: "p"}); err != nil {
-		t.Fatal(err)
-	}
-	if us := users(); strings.Join(us, ",") != "a@x.com,b@x.com,c@x.com" {
-		t.Fatalf("after an account added: %v", us)
-	}
-
-	// nothing read before (magpie just started): the file is kept aside
-	// before it is written over. The add above kept its own copy, named by
-	// the second it was made, so only the copies made from here count.
-	before, _ := filepath.Glob(p + ".bad-*")
-	for _, f := range before {
-		os.Remove(f)
-	}
+	// Cached credentials stay available, but a write cannot replace the damaged primary.
 	half := good[:len(good)/2]
 	os.WriteFile(p, half, 0o600)
-	lastLoginsMu.Lock()
-	lastLogins = nil
-	lastLoginsMu.Unlock()
-	if err := addGoogleLogin("antigravity", "d@x.com", "", googleAuth{RefreshToken: "1//d", Project: "p"}); err != nil {
-		t.Fatal(err)
+	if us := users(); strings.Join(us, ",") != "a@x.com,b@x.com" {
+		t.Fatalf("cached credentials lost: %v", us)
 	}
-	kept, _ := filepath.Glob(p + ".bad-*")
-	if len(kept) != 1 {
-		t.Fatalf("logins.json that didn't parse not kept aside: %v", kept)
+	for _, user := range []string{"c@x.com", "d@x.com"} {
+		if err := addGoogleLogin("antigravity", user, "", googleAuth{RefreshToken: "synthetic", Project: "p"}); err == nil {
+			t.Fatal("damaged credentials overwritten")
+		}
+		lastLoginsMu.Lock()
+		lastLogins = nil
+		lastLoginsMu.Unlock()
 	}
-	if b, _ := os.ReadFile(kept[0]); string(b) != string(half) {
-		t.Fatalf("kept %q", b)
+	if kept, _ := filepath.Glob(p + ".bad-*"); len(kept) != 0 {
+		t.Fatal("recovery copies generated")
+	}
+	if b, _ := os.ReadFile(p); string(b) != string(half) {
+		t.Fatal("damaged original changed")
 	}
 }

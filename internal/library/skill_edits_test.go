@@ -13,7 +13,8 @@ import (
 // undone at magpie's next start, the sync making the copy again from the
 // library's. The newest edit goes to the library and every other agent
 // instead; the library's own change wins when it is newer, and an edit that
-// loses is kept with the backups.
+// loses is moved aside as its unique original; the previous library
+// contents are not copied for recovery.
 func TestSkillCopyEditReachesTheOthers(t *testing.T) {
 	h := sandbox(t)
 	src := filepath.Join(h, "src/skills")
@@ -44,8 +45,8 @@ func TestSkillCopyEditReachesTheOthers(t *testing.T) {
 			t.Fatal("the copies aren't magpie's any more")
 		}
 	}
-	if !backedUp(t, "Read PDFs") {
-		t.Error("the library's skill as it was isn't with the backups")
+	if backedUp(t, "Read PDFs") {
+		t.Error("the library created a duplicate recovery snapshot")
 	}
 
 	// Claude Code edits its copy, then the library's folder is edited by

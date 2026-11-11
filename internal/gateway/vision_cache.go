@@ -11,13 +11,15 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
@@ -29,11 +31,24 @@ const (
 	sightCacheVersion  = 2
 	sightKindInline    = "inline"
 	sightsCompactAfter = 2 * sightsKept
+	// A damaged legacy file is never allowed to make every restart read
+	// an unbounded cache. Oversized files need the same explicit repair.
+	sightsMaxDiskBytes = 32 << 20
+	sightsDiskDisabled = -1
 )
 
 // sightsSaving orders writers in this process; the file lock below orders
 // writers across a handover. The lock file is never the descriptions file.
 var sightsSaving sync.Mutex
+
+// sightsChecked is the last file validated under sightsSaving and its file
+// lock. Normal appends only stat the unchanged file; a different writer's
+// changes are validated before another append can modify them.
+var sightsChecked struct {
+	path  string
+	info  os.FileInfo
+	lines int
+}
 
 // savedSight is one completed description in vision-cache.jsonl. Version is
 // the on-disk format and the description contract. Kind is explicit so a URL
@@ -59,14 +74,29 @@ func validSavedSight(v savedSight) bool {
 // A malformed line is reported separately from an invalid record: loading can
 // skip it, but compaction must not treat an unreadable file as an empty one.
 func readSavedSights(path string) (records []savedSight, lines int, malformed bool, err error) {
-	b, err := steady.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, false, err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil {
+		return nil, 0, false, err
+	} else if info.Size() > sightsMaxDiskBytes {
+		return nil, 0, true, fmt.Errorf("vision cache exceeds %d bytes", sightsMaxDiskBytes)
+	}
+	b, err := io.ReadAll(io.LimitReader(f, sightsMaxDiskBytes+1))
+	if err != nil {
+		return nil, 0, false, err
+	}
+	if len(b) > sightsMaxDiskBytes {
+		return nil, 0, true, fmt.Errorf("vision cache exceeds %d bytes", sightsMaxDiskBytes)
 	}
 	latest := map[string]savedSight{}
 	last := map[string]int{}
 	seq := 0
-	for _, line := range bytes.Split(b, []byte{'\n'}) {
+	for len(b) > 0 {
+		var line []byte
+		line, b, _ = bytes.Cut(b, []byte{'\n'})
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
@@ -97,11 +127,16 @@ func readSavedSights(path string) (records []savedSight, lines int, malformed bo
 // a crash-truncated tail doesn't hide the records before it. New doesn't write
 // or compact, so a starting gateway can't erase another gateway's new append.
 func (s *Server) loadSights() {
-	records, lines, _, err := readSavedSights(s.sightFile)
+	records, lines, malformed, err := readSavedSights(s.sightFile)
+	if malformed {
+		s.stopSightWrites()
+	}
 	if err != nil {
 		return
 	}
-	s.sightDiskLines = lines
+	if !malformed {
+		s.sightDiskLines = lines
+	}
 	_ = os.Chmod(s.sightFile, 0o600)
 	for _, v := range records {
 		done := make(chan struct{})
@@ -165,18 +200,69 @@ func (s *Server) saveSight(key, text, by string) {
 	}
 	sightsSaving.Lock()
 	defer sightsSaving.Unlock()
+	if s.sightDiskLines == sightsDiskDisabled {
+		return
+	}
 	unlock, held := filelock.Lock(s.sightFile+".lock", filelock.Wait)
 	defer unlock()
 	if !held {
 		return
 	}
+	if !s.canWriteSightsLocked() {
+		return
+	}
 	if s.appendSightLocked(line) != nil {
+		sightsChecked.info = nil
 		return
 	}
 	s.sightDiskLines++
 	if s.sightDiskLines >= sightsCompactAfter {
 		s.compactSightsLocked()
 	}
+	if s.sightDiskLines == sightsDiskDisabled {
+		sightsChecked.info = nil
+		return
+	}
+	sightsChecked.path = s.sightFile
+	sightsChecked.info, _ = os.Stat(s.sightFile)
+	sightsChecked.lines = s.sightDiskLines
+}
+
+// stopSightWrites leaves the original bytes intact and keeps the cache in
+// memory only until an operator repairs the file and restarts the gateway.
+func (s *Server) stopSightWrites() {
+	if s.sightDiskLines != sightsDiskDisabled {
+		log.Printf("vision cache: persistence disabled for %s; file left unchanged; repair or move it explicitly and restart the gateway (image descriptions remain cached in memory)", s.sightFile)
+	}
+	s.sightDiskLines = sightsDiskDisabled
+}
+
+func (s *Server) canWriteSightsLocked() bool {
+	info, err := os.Stat(s.sightFile)
+	if errors.Is(err, os.ErrNotExist) {
+		s.sightDiskLines = 0
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	last := sightsChecked.info
+	if s.sightFile == sightsChecked.path && last != nil && os.SameFile(info, last) &&
+		info.Size() == last.Size() && info.ModTime() == last.ModTime() {
+		s.sightDiskLines = max(s.sightDiskLines, sightsChecked.lines)
+		return true
+	}
+	_, lines, malformed, err := readSavedSights(s.sightFile)
+	if malformed {
+		s.stopSightWrites()
+		return false
+	}
+	if err != nil {
+		return false
+	}
+	s.sightDiskLines = max(s.sightDiskLines, lines)
+	sightsChecked.path, sightsChecked.info, sightsChecked.lines = s.sightFile, info, lines
+	return true
 }
 
 func (s *Server) appendSightLocked(line []byte) error {
@@ -216,12 +302,11 @@ func (s *Server) appendSightLocked(line []byte) error {
 func (s *Server) compactSightsLocked() {
 	path := s.sightFile
 	records, _, malformed, err := readSavedSights(path)
-	if err != nil {
+	if malformed {
+		s.stopSightWrites()
 		return
 	}
-	if malformed && !s.preserveMalformedSights(path) {
-		// An unreadable line stays readable evidence rather than being erased
-		// by a compaction that couldn't preserve it first.
+	if err != nil {
 		return
 	}
 	var out bytes.Buffer
@@ -244,16 +329,4 @@ func (s *Server) compactSightsLocked() {
 		return
 	}
 	s.sightDiskLines = len(records)
-}
-
-// preserveMalformedSights copies a file whose malformed line compaction is
-// about to drop, so a crash-truncated or hand-edited cache can be inspected
-// and the valid records can still be compacted instead of growing forever.
-func (s *Server) preserveMalformedSights(path string) bool {
-	b, err := steady.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	backup := path + ".broken-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	return steady.WriteFile(backup, b, 0o600) == nil
 }

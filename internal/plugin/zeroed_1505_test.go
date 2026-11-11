@@ -45,6 +45,8 @@ func TestZeroedPluginAuthReadFromBackup(t *testing.T) {
 	defer cancel()
 	addRenew(t, ctx)
 	a := importRenew(t, ctx, "a@renew")
+	legacy, _ := os.ReadFile(AuthPath())
+	os.WriteFile(lastgood.Bak(AuthPath()), legacy, 0o600)
 	b := importRenew(t, ctx, "b@renew")
 	Restart()
 	if _, err := os.Stat(lastgood.Bak(AuthPath())); err != nil {
@@ -63,26 +65,18 @@ func TestZeroedPluginAuthReadFromBackup(t *testing.T) {
 	}
 	lastgood.Reset() // the host's own read is told magpie too
 
-	// the host's
-	c := importRenew(t, ctx, "c@renew")
-	all := authFile(t)
-	if all[a] == nil || all[c] == nil {
-		t.Fatalf("after a sign-in added over a zeroed file: %v", all)
+	// The host can read the legacy backup but cannot overwrite the damaged primary.
+	if _, err := Import(ctx, "renewco", map[string]any{"type": "api", "key": "synthetic"}); err == nil {
+		t.Fatal("host overwrote damaged primary")
 	}
-	_ = b // the write the crash took
-	kept, _ := filepath.Glob(AuthPath() + ".bad-*")
-	if len(kept) != 1 {
-		t.Fatalf("the zeroed file not kept aside: %v", kept)
+	_ = b
+	if kept, _ := filepath.Glob(AuthPath() + ".bad-*"); len(kept) != 0 {
+		t.Fatal("host created recovery copies")
 	}
-	if got, _ := os.ReadFile(kept[0]); !bytes.Equal(got, zeroedAuth) {
-		t.Fatalf("kept %d bytes", len(got))
+	if got, _ := os.ReadFile(AuthPath()); !bytes.Equal(got, zeroedAuth) {
+		t.Fatal("damaged primary changed")
 	}
-	for wait := time.Now().Add(5 * time.Second); len(lastgood.Recovered()) == 0 && time.Now().Before(wait); {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if n := lastgood.Recovered(); len(n) != 1 || n[0].File != "plugin-auth.json" || n[0].Why != "29926 bytes, every one zero" {
-		t.Fatalf("the host's recovery isn't told: %+v", n)
-	}
+
 }
 
 // With no backup, a zeroed plugin-auth.json is unknown, never none: a
@@ -113,14 +107,13 @@ func TestZeroedPluginAuthWithoutBackupNotWrittenOver(t *testing.T) {
 	if got, _ := os.ReadFile(AuthPath()); !bytes.Equal(got, zeroedAuth) {
 		t.Fatalf("magpie's sign-out wrote %q over sign-ins that don't read", got)
 	}
-	// a sign-in added writes, the zeroed file kept aside first
-	k := importRenew(t, ctx, "new@renew")
-	if authFile(t)[k] == nil {
-		t.Fatal("the sign-in added wasn't kept")
+	if _, err := Import(ctx, "renewco", map[string]any{"type": "api", "key": "synthetic"}); err == nil {
+		t.Fatal("host overwrote damaged primary")
 	}
-	if kept, _ := filepath.Glob(AuthPath() + ".bad-*"); len(kept) != 1 {
-		t.Fatalf("the zeroed file not kept aside: %v", kept)
+	if kept, _ := filepath.Glob(AuthPath() + ".bad-*"); len(kept) != 0 {
+		t.Fatal("host created recovery copies")
 	}
+
 }
 
 // The host flushes plugin-auth.json before renaming it over the old: a

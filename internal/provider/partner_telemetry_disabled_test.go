@@ -3,7 +3,6 @@ package provider
 import (
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"testing"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -18,12 +17,7 @@ func TestPartnerTelemetryNotCollected(t *testing.T) {
 	if err := settings.Save(settings.Settings{}); err != nil {
 		t.Fatal(err)
 	}
-	resetPartners()
-	t.Cleanup(resetPartners)
-	var body atomic.Value
-	body.Store(`{"partners":[{"id":"acme","name":"Acme","chat":"https://a.example/v1"}]}`)
-	t.Setenv("MAGPIE_PARTNERS", partnerFeedServer(t, &body).URL)
-	fetchPartnersNow()
+	cachedPartners(t)
 	for _, event := range []string{PartnerShown, PartnerOpened, PartnerKeys, PartnerAdded} {
 		CountPartner(event, "acme")
 	}

@@ -68,7 +68,10 @@ func TestQuotaHistoryWrittenNotReadAgain(t *testing.T) {
 	os.WriteFile(other, []byte(`{"cut`), 0o600)
 	os.Rename(other, path)
 	noteQuotaHistory([]SubscriptionQuota{histCard("A@x.com", 80, r5, 40, rw)}, at(80))
-	if bad, _ := filepath.Glob(path + ".bad-*"); len(bad) != 1 {
-		t.Fatalf("the unparsed file kept aside as %v", bad)
+	if bad, _ := filepath.Glob(path + ".bad-*"); len(bad) != 0 {
+		t.Fatalf("recovery copies generated: %v", bad)
+	}
+	if got, _ := os.ReadFile(path); string(got) != `{"cut` {
+		t.Fatal("corrupt history overwritten")
 	}
 }

@@ -60,9 +60,6 @@ func TestCheckNow(t *testing.T) {
 		npmCached()[p] = npmEntry{NPM{Version: "0.1.2"}, time.Now().Add(-time.Minute)}
 	}
 	npmMu.Unlock()
-	was := installNewest
-	t.Cleanup(func() { installNewest = was })
-	installNewest = func(_ context.Context, pkg, _ string) error { t.Errorf("a check installed %s", pkg); return nil }
 
 	c := CheckNow(context.Background())
 	got := map[string]string{}
@@ -88,7 +85,7 @@ func TestCheckNow(t *testing.T) {
 		t.Fatalf("checked %+v", c)
 	}
 	for _, p := range c.Plugins {
-		if p.Auto != (p.Package == ours || p.Package == current) {
+		if p.Auto {
 			t.Errorf("%s: Auto %v", p.Package, p.Auto)
 		}
 	}
@@ -98,7 +95,7 @@ func TestCheckNow(t *testing.T) {
 	}
 	// someone else's update waits for the reader; the community's comes
 	// by itself
-	if p := PendingUpdates(); len(p.Waiting) != 1 || p.Waiting[0].Package != theirs || p.Waiting[0].Latest != "1.0.0" || p.Checked.IsZero() {
+	if p := PendingUpdates(); len(p.Waiting) != 2 || p.Waiting[0].Package != ours || p.Waiting[1].Package != theirs || p.Waiting[1].Latest != "1.0.0" || p.Checked.IsZero() {
 		t.Fatalf("waiting %+v", p)
 	}
 }

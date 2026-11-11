@@ -51,50 +51,34 @@ func TestCheckUpdates(t *testing.T) {
 	}
 	installedAt(t, fresh, "0.2.0")
 	latest := map[string]string{ours: "0.1.4", pinned: "0.1.4", theirs: "1.0.0", off: "0.1.4", fresh: "0.2.0"}
-	var installed []string
-	was, wasInstall := latestOf, installNewest
-	t.Cleanup(func() { latestOf, installNewest = was, wasInstall })
+	was := latestOf
+	t.Cleanup(func() { latestOf = was })
 	latestOf = func(context.Context, []string) map[string]string { return latest }
-	installNewest = func(_ context.Context, pkg, _ string) error {
-		installed = append(installed, pkg)
-		installedAt(t, pkg, latest[pkg])
-		return nil
-	}
 
 	u, err := CheckUpdates(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(installed, ",") != ours {
-		t.Fatalf("installed %v, want only %s", installed, ours)
-	}
-	if Installed(ours+"@latest") != "0.1.4" || len(u.Updated) != 1 || u.Updated[0].From != "0.1.2" || u.Updated[0].To != "0.1.4" {
-		t.Fatalf("Updated = %+v", u.Updated)
+	if Installed(ours+"@latest") != "0.1.2" || len(u.Updated) != 0 {
+		t.Fatalf("check installed an update: %+v", u)
 	}
 	p := PendingUpdates()
 	var waiting []string
 	for _, w := range p.Waiting {
 		waiting = append(waiting, w.Package+"@"+w.Latest)
 	}
-	if strings.Join(waiting, ",") != pinned+"@0.1.4,"+theirs+"@1.0.0" {
+	if strings.Join(waiting, ",") != ours+"@0.1.4,"+pinned+"@0.1.4,"+theirs+"@1.0.0" {
 		t.Fatalf("Waiting = %v", waiting)
-	}
-	if x, ok := LastUpdated(ours, time.Now().Add(-time.Hour)); !ok || x.To != "0.1.4" {
-		t.Fatalf("LastUpdated = %+v, %v", x, ok)
-	}
-	if _, ok := LastUpdated(ours, time.Now().Add(time.Hour)); ok {
-		t.Fatal("an update older than asked for was told")
 	}
 
 	// the reader updates theirs: it waits no more, before magpie looks again
 	installedAt(t, theirs, "1.0.0")
-	if p := PendingUpdates(); len(p.Waiting) != 1 || p.Waiting[0].Package != pinned {
+	if p := PendingUpdates(); len(p.Waiting) != 2 || p.Waiting[0].Package != ours || p.Waiting[1].Package != pinned {
 		t.Fatalf("after updating %s, Waiting = %+v", theirs, p.Waiting)
 	}
 	// looking again updates nothing more, and keeps what it updated
-	installed = nil
-	if u, err := CheckUpdates(context.Background()); err != nil || len(installed) != 0 || len(u.Updated) != 1 {
-		t.Fatalf("looking again: installed %v, %+v, %v", installed, u, err)
+	if u, err := CheckUpdates(context.Background()); err != nil || len(u.Updated) != 0 {
+		t.Fatalf("looking again: %+v, %v", u, err)
 	}
 }
 

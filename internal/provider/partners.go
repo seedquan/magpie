@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,24 +14,24 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/source"
+	"github.com/yetone/magpie/internal/steady"
 )
 
-// Partners are services that pay to be listed first in the add sheet,
-// under a heading of their own that says so. Who they are changes without
-// a release: the list is fetched from PartnersURL, as the plugin market's
-// is, and kept on disk. A partner is a preset in all but where it comes
-// from, so adding one, its editor and its key page work as a preset's do.
+// Partners are cached sponsored presets. This fork never fetches a partner
+// feed or its logos automatically; cached presets remain usable by existing providers.
 
-// PartnersURL is where the list is kept; MAGPIE_PARTNERS moves it, and
-// MAGPIE_PARTNERS=off keeps to none.
+// PartnersURL is the official feed, fetched only by an explicit user action.
 const PartnersURL = "https://usemagpie.ai/api/partners"
+
+// partnerFeedURL is replaced by local fixtures in tests.
+var partnerFeedURL = PartnersURL
+var partnerRefreshMu sync.Mutex
 
 // KindPartner is a partner's Kind: the add sheet lists them apart.
 const KindPartner Kind = "partner"
@@ -73,12 +72,8 @@ type partnerFeed struct {
 type partnerCache struct {
 	At       time.Time `json:"at"`
 	Partners []Partner `json:"partners"`
-	// Tried is when the last fetch started, and Error how it ended, ""
-	// once it got the list (At is then its time) or while it is still
-	// out. So the file tells a fetch that failed (Error) from one that
-	// never came back (Tried after At, no Error) and from none asked
-	// (Tried old): an app that kept an old list for days left nothing to
-	// tell them apart (#3362).
+	// Tried and Error retain compatibility with older cached fetch metadata.
+	// This fork reports manual failures to the caller without rewriting the cache.
 	Tried time.Time          `json:"tried,omitzero"`
 	Error string             `json:"error,omitempty"`
 	Seen  map[string]Partner `json:"seen,omitempty"`
@@ -88,41 +83,20 @@ type partnerCache struct {
 }
 
 var (
-	partnerMu      sync.Mutex
-	partnerState   *partnerCache // nil until read from disk
-	partnerNext    time.Time     // the next fetch, when none is running
-	partnerFetches bool
-	partnerLogged  string // the failure logged last, so a long one is logged once
+	partnerMu    sync.Mutex
+	partnerState *partnerCache // nil until read from disk
 )
-
-// A list is fetched again after partnerEvery, so a partner added reaches
-// an app left running within the hour; the list is a couple of KB and its
-// icons aren't fetched again (partnerIcon). A var, so a test can shorten it.
-var partnerEvery = time.Hour
-
-const partnerRetry = 10 * time.Minute
 
 var partnerID = lazyre.New(`^[a-z0-9][a-z0-9-]{1,40}$`)
 
 func partnerCacheFile() string { return filepath.Join(appdir.Cache(), "partners.json") }
 
-func partnersSource() string {
-	src := os.Getenv("MAGPIE_PARTNERS")
-	if src == "" {
-		if testing.Testing() {
-			// a test never asks the real site; one that wants a list
-			// names its own
-			return "off"
-		}
-		src = PartnersURL
-	}
-	return src
-}
+// MAGPIE_PARTNERS=off still hides cached partners; other values cannot
+// enable network access.
+func partnersSource() string { return os.Getenv("MAGPIE_PARTNERS") }
 
-// Partners are the partners listed now, in the list's order: what was
-// fetched last, never waited for. A list this process hasn't fetched, or
-// fetched an hour ago, is fetched again behind the call, and the page
-// asked again shows it.
+// Partners returns validated, live entries from the existing local cache.
+// Reading the list never starts a network request.
 func Partners() []Partner {
 	if partnersSource() == "off" {
 		return nil
@@ -130,10 +104,6 @@ func Partners() []Partner {
 	partnerMu.Lock()
 	defer partnerMu.Unlock()
 	loadPartners()
-	if !partnerFetches && time.Now().After(partnerNext) {
-		partnerFetches = true
-		go refreshPartners()
-	}
 	now := time.Now()
 	var out []Partner
 	for _, p := range partnerState.Partners {
@@ -145,65 +115,11 @@ func Partners() []Partner {
 	return out
 }
 
-// PartnersNow is Partners for a command that ends at once, before a fetch
-// behind it could: a list due is fetched first, waited for at most wait.
-func PartnersNow(wait time.Duration) []Partner {
-	if partnersSource() == "off" {
-		return nil
-	}
-	partnerMu.Lock()
-	loadPartners()
-	due := !partnerFetches && time.Now().After(partnerNext)
-	if due {
-		partnerFetches = true
-	}
-	partnerMu.Unlock()
-	if due {
-		done := make(chan struct{})
-		go func() { refreshPartners(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(wait):
-		}
-	}
-	return Partners()
-}
+// PartnersNow keeps the CLI interface without fetching or waiting.
+func PartnersNow(_ time.Duration) []Partner { return Partners() }
 
-// KeepPartnersFresh fetches the partner list when the magpie serving the
-// gateway starts, and again whenever it is due (every hour, ten minutes
-// after a failed fetch), whether or not a page asks for it, so a partner
-// added reaches an app left running within the hour, and the list kept on
-// disk is fresh for the next start.
-func KeepPartnersFresh(ctx context.Context) {
-	if partnersSource() == "off" {
-		return
-	}
-	t := time.NewTimer(0)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		partnerMu.Lock()
-		loadPartners()
-		due := !partnerFetches && !time.Now().Before(partnerNext)
-		if due {
-			partnerFetches = true
-		}
-		partnerMu.Unlock()
-		if due {
-			refreshPartners()
-		}
-		partnerMu.Lock()
-		wait := time.Until(partnerNext)
-		partnerMu.Unlock()
-		// a fetch Partners started is still running when partnerNext
-		// has passed: look again in a second
-		t.Reset(max(wait, time.Second))
-	}
-}
+// KeepPartnersFresh is permanently disabled in this fork.
+func KeepPartnersFresh(context.Context) {}
 
 // loadPartners reads the list kept on disk the first time it's asked for;
 // partnerMu held.
@@ -232,87 +148,67 @@ func loadPartners() {
 			delete(c.Seen, id)
 		}
 	}
-	// partnerNext stays zero: a process started fetches on its first ask,
-	// whatever the kept list's age. Waiting out the kept list's six hours
-	// held back a partner added minutes after it was fetched, restart or not.
 	partnerState = &c
 }
 
-// refreshPartners fetches the list and keeps it; on a failure the list
-// held stays, and it is tried again in ten minutes. When it started and
-// how it ended are kept with the list (Tried, Error), and a failure is
-// logged once until the list is fetched again.
-func refreshPartners() {
-	partnerMu.Lock()
-	loadPartners()
-	partnerState.Tried, partnerState.Error = time.Now(), ""
-	savePartners()
-	partnerMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+// RefreshPartners fetches the official list and logos only on explicit request.
+// Calls are serialized, bounded by the caller and a 20-second deadline. A
+// failure leaves the prior list and saved file intact.
+func RefreshPartners(ctx context.Context) error {
+	if partnersSource() == "off" {
+		return errors.New("partner fetching is disabled by MAGPIE_PARTNERS=off")
+	}
+	if !partnerRefreshMu.TryLock() {
+		return errors.New("partner list is already being fetched")
+	}
+	defer partnerRefreshMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	src := partnersSource()
-	list, err := fetchPartners(ctx, src)
-	if err == nil {
-		for i := range list {
-			list[i].Icon = partnerIcon(ctx, list[i])
-		}
+	list, err := fetchPartners(ctx, partnerFeedURL)
+	if err != nil {
+		return err
+	}
+	for i := range list {
+		list[i].Icon = partnerIcon(ctx, list[i])
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	partnerMu.Lock()
 	defer partnerMu.Unlock()
-	partnerFetches = false
 	loadPartners()
-	if err != nil {
-		partnerNext = time.Now().Add(partnerRetry)
-		partnerState.Error = partnerError(err)
-		savePartners()
-		if partnerState.Error != partnerLogged {
-			partnerLogged = partnerState.Error
-			log.Printf("partners: the list couldn't be fetched from %s, asked again in %s: %s", src, partnerRetry, partnerLogged)
-		}
-		return
+	old := partnerState
+	next := *old
+	next.Seen = map[string]Partner{}
+	for id, p := range old.Seen {
+		next.Seen[id] = p
 	}
-	if partnerLogged != "" {
-		partnerLogged = ""
-		log.Printf("partners: the list is fetched again from %s", src)
-	}
-	now := time.Now()
-	partnerState.At, partnerState.Partners = now, list
+	next.At = time.Now().UTC()
+	next.Tried, next.Error, next.Partners = next.At, "", list
 	for _, p := range list {
-		partnerState.Seen[p.ID] = p
+		next.Seen[p.ID] = p
 	}
-	partnerNext = now.Add(partnerEvery)
-	savePartners()
-}
-
-// partnerError is err as the list keeps it: its text, cut to a size
-// that stays readable in the file.
-func partnerError(err error) string {
-	msg := strings.Join(strings.Fields(err.Error()), " ")
-	if r := []rune(msg); len(r) > 500 {
-		msg = string(r[:500]) + "…"
+	partnerState = &next
+	if err := savePartners(); err != nil {
+		partnerState = old
+		return err
 	}
-	return msg
+	return nil
 }
 
 // savePartners writes what is held to disk; partnerMu held.
-func savePartners() {
+func savePartners() error {
 	b, err := json.Marshal(partnerState)
 	if err != nil {
-		return
+		return err
 	}
-	// loadPartners reads a file that doesn't parse as no list and no Seen:
-	// it is kept aside before it is written over, and not written over
-	// when it can't be read. Every try writes the file (Tried, #3362), so
-	// without this the first one, offline too, lost the presets of the
-	// partners no longer listed that providers added from them still use.
-	if lastgood.KeepUnparsed(partnerCacheFile(), lastgood.Into[partnerCache]) != nil {
-		return
+	if err := lastgood.KeepUnparsed(partnerCacheFile(), lastgood.Into[partnerCache]); err != nil {
+		return err
 	}
-	_ = os.MkdirAll(filepath.Dir(partnerCacheFile()), 0o755)
-	tmp := partnerCacheFile() + ".tmp"
-	if os.WriteFile(tmp, b, 0o644) == nil {
-		_ = os.Rename(tmp, partnerCacheFile())
+	if err := os.MkdirAll(filepath.Dir(partnerCacheFile()), 0o700); err != nil {
+		return err
 	}
+	return steady.WriteFile(partnerCacheFile(), b, 0o600)
 }
 
 // NoticePartners keeps that the user has been shown the partners ids, so
@@ -332,7 +228,7 @@ func NoticePartners(ids ...string) {
 		}
 	}
 	if changed {
-		savePartners()
+		_ = savePartners()
 	}
 }
 
@@ -509,7 +405,7 @@ func partnerIcon(ctx context.Context, p Partner) string {
 	if p.IconURL == "" {
 		return "generic"
 	}
-	// an icon kept from the same URL is used as it is, so an hourly fetch
+	// an icon kept from the same URL is used as it is, so a manual fetch
 	// doesn't download it again; a partner's new logo goes at a new URL
 	partnerMu.Lock()
 	loadPartners()
@@ -578,24 +474,9 @@ func partnerPreset(id string) *PresetDef {
 	return &d
 }
 
-// resetPartners forgets the list held in memory, for tests. A fetch
-// still running would store its list over the one held after the reset,
-// so it is waited for first.
+// resetPartners forgets the cache held in memory, for tests.
 func resetPartners() {
-	claimPartnerFetch()
-	partnerState, partnerNext, partnerFetches, partnerLogged = nil, time.Time{}, false, ""
-	partnerMu.Unlock()
-}
-
-// claimPartnerFetch waits for the fetch running, if any, to end and returns
-// with partnerMu held and no fetch running, for tests.
-func claimPartnerFetch() {
-	for {
-		partnerMu.Lock()
-		if !partnerFetches {
-			return
-		}
-		partnerMu.Unlock()
-		time.Sleep(5 * time.Millisecond)
-	}
+	partnerMu.Lock()
+	defer partnerMu.Unlock()
+	partnerState = nil
 }

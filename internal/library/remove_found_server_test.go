@@ -1,6 +1,7 @@
 package library
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,8 +13,8 @@ import (
 // leaves every agent that has it as it is: Claude Code's ~/.claude.json
 // keeps the user's other keys and server, Codex's config.toml its comment,
 // its settings and the user's other table, OpenCode's JSONC its comments.
-// Each file is in the backups as it was. Gemini CLI's other server by
-// that name stays, and so does a file that doesn't parse.
+// No persistent snapshots are created. Gemini CLI's other server by that
+// name stays, and so does a file that doesn't parse.
 func TestRemoveFoundServer(t *testing.T) {
 	h := sandbox(t)
 	cj := filepath.Join(h, ".claude.json")
@@ -109,22 +110,11 @@ model = "gpt-6-mini"
 		t.Errorf("cursor's file that doesn't parse was written:\n%s", read(t, cursor))
 	}
 
-	// each as it was, in this change's backups
-	if res.Backup == "" {
-		t.Fatal("no backup said")
+	if res.Backup != "" {
+		t.Errorf("removal reported a snapshot: %q", res.Backup)
 	}
-	for _, b := range []struct{ agent, file, was string }{{"claude", ".claude.json", claudeWas}} {
-		if got := read(t, filepath.Join(res.Backup, b.agent, b.file)); got != b.was {
-			t.Errorf("%s's backup: %q", b.agent, got)
-		}
-	}
-	for _, p := range []string{"codex/config.toml", "opencode/opencode.json"} {
-		if read(t, filepath.Join(res.Backup, p)) == "" {
-			t.Errorf("%s isn't in the backups", p)
-		}
-	}
-	if m, _ := filepath.Glob(filepath.Join(res.Backup, "*", "settings.json")); len(m) != 0 {
-		t.Errorf("gemini's file, not written, was backed up: %v", m)
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("removal created snapshots: %v, %v", es, err)
 	}
 
 	// what's found now is Gemini's
@@ -232,7 +222,7 @@ func TestRemoveFoundServerEveryAgent(t *testing.T) {
 // Every format magpie reads an agent's servers in, the agents a sandbox
 // doesn't find included (Hermes, Zed, Kimi, Devin, Grok, Cline, …): the
 // entry goes, the user's other server and their key in it stay, and the
-// file is backed up first.
+// no persistent snapshots are created.
 func TestRemoveFoundEntryEveryFormat(t *testing.T) {
 	sandbox(t)
 	gone := &Server{Name: "gone", Transport: "stdio", Command: "gone-mcp", Args: []string{"--x"}}
@@ -259,7 +249,6 @@ func TestRemoveFoundEntryEveryFormat(t *testing.T) {
 		if have, err := mf.read(); err != nil || have["gone"] == nil {
 			t.Fatalf("format %d: not written: %v %v", fm, have, err)
 		}
-		was := read(t, mf.Path)
 		b := newBackups()
 		if err := removeFoundEntry(mf, "x", "gone", b); err != nil {
 			t.Fatalf("format %d: %v", fm, err)
@@ -271,8 +260,11 @@ func TestRemoveFoundEntryEveryFormat(t *testing.T) {
 		if es, _ := mf.entries(); es["mine"]["note"] != "the user's" {
 			t.Errorf("format %d: the user's key: %v", fm, es["mine"])
 		}
-		if got := read(t, filepath.Join(b.dir, "x", filepath.Base(mf.Path))); got != was {
-			t.Errorf("format %d: backup %q", fm, got)
+		if b.dir != "" {
+			t.Errorf("format %d: removal reported a snapshot: %q", fm, b.dir)
+		}
+		if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+			t.Errorf("format %d: removal created snapshots: %v, %v", fm, es, err)
 		}
 	}
 }
@@ -307,11 +299,11 @@ func TestRemoveFoundEntryPiExtra(t *testing.T) {
 	if have, _ := old.read(); have["gone"] != nil || have["mine"] == nil {
 		t.Errorf("the other file after: %v", have)
 	}
-	if read(t, filepath.Join(b.dir, "pi", "mcp-adapter.json")) == "" {
-		t.Error("the other file isn't in the backups")
+	if b.dir != "" {
+		t.Errorf("removal reported a snapshot: %q", b.dir)
 	}
-	if read(t, filepath.Join(b.dir, "pi", "mcp.json")) != "" {
-		t.Error("mcp.json, without the server, was backed up as if written")
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("removal created snapshots: %v, %v", es, err)
 	}
 
 	// every file is read before any is written: the other one not parsing

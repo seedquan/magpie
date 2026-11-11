@@ -80,7 +80,7 @@ func readResetsUsed() ([]ResetUse, error) {
 // says one was, and says when keeping it failed: the reset is spent on
 // the server either way, so the caller names the loss rather than treat
 // the spend as failed (#5556). A file that doesn't parse is copied aside
-// first, not written over unread.
+// is left untouched, and the caller receives the write error.
 func noteResetUsed(user, why string, out ResetOutcome) error {
 	if user == "" || out.Code != "reset" {
 		return nil
@@ -89,11 +89,7 @@ func noteResetUsed(user, why string, out ResetOutcome) error {
 	defer resetsUsedMu.Unlock()
 	us, err := readResetsUsed()
 	if err != nil {
-		p := resetsUsedPath()
-		if b, rerr := os.ReadFile(p); rerr == nil {
-			_ = os.WriteFile(p+".bad-"+time.Now().UTC().Format("20060102T150405.000000000"), b, 0o600)
-		}
-		us = nil
+		return fmt.Errorf("keeping that a reset was used: %w", err)
 	}
 	now := time.Now().UTC()
 	us = slices.DeleteFunc(us, func(u ResetUse) bool { return now.Sub(u.At) > resetsUsedKeep })
