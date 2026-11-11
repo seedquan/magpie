@@ -1,15 +1,6 @@
-// Package lastgood keeps the last good generation of magpie's own state
-// files (accounts, sign-ins, providers, settings) and reads it back when
-// the file itself can't be read.
-//
-// A Windows machine that went down mid-write left logins.json and
-// plugin-auth.json at their full length with every byte zero (#1505).
-// magpie then read no accounts, and its next write made that final. Here a
-// file that is there but not valid is unknown, never empty: before each
-// write the file there now is kept as <file>.bak when it is valid, or
-// copied aside as <file>.bad-<time> when it isn't, and a read of a file
-// that isn't valid gives the .bak's contents instead, noted for the GUI and
-// the log.
+// Package lastgood reads legacy recovery files but creates no new copies.
+// Writes validate the existing file first. A damaged or unreadable file
+// stops the write, preserving its bytes for the user to repair explicitly.
 package lastgood
 
 import (
@@ -21,10 +12,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -102,14 +91,10 @@ func describe(b []byte) string {
 	return "it doesn't parse"
 }
 
-// Keep is called before path is replaced, under the lock its writer
-// holds: the file there now, when valid, becomes the last good generation,
-// path.bak, written to the disk before path is; one that isn't valid is
-// copied aside (path.bad-<time>) and the .bak left as it is, so a file
-// that can't be read is never written over before a copy of it is kept.
-// A file not there needs neither. An error stops the write: the file there
-// couldn't be read, or a bad one couldn't be kept.
-func Keep(path string, valid Valid, perm fs.FileMode) error {
+// Keep validates path before replacement without writing a recovery copy.
+// A missing file may be created; a damaged one must be repaired explicitly.
+// perm is retained for compatibility with the state writers.
+func Keep(path string, valid Valid, _ fs.FileMode) error {
 	b, err := steady.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -117,14 +102,10 @@ func Keep(path string, valid Valid, perm fs.FileMode) error {
 	if err != nil {
 		return err
 	}
-	if valid(b) {
-		if old, err := os.ReadFile(Bak(path)); err == nil && bytes.Equal(old, b) {
-			return nil
-		}
-		return steady.WriteFile(Bak(path), b, perm)
+	if !valid(b) {
+		return fmt.Errorf("%s cannot be replaced (%s); repair it before saving (recovery copies are disabled): %w", path, describe(b), ErrUnreadable)
 	}
-	_, err = KeepBad(path, b)
-	return err
+	return nil
 }
 
 // Into is a file that unmarshals into a T: what a reader that takes any
@@ -135,96 +116,14 @@ func Into[T any](b []byte) bool {
 	return json.Unmarshal(b, &v) == nil
 }
 
-// KeepUnparsed is called before path is written over, by a writer whose
-// reader takes a file that doesn't parse (parses false) as empty: such a
-// file is copied aside (KeepBad) first, so the write of what was read as
-// empty doesn't lose what it held. A file not there, or empty, needs
-// nothing. An error stops the write: the file there couldn't be read, or
-// couldn't be kept.
+// KeepUnparsed validates a file whose reader otherwise treats bad data as
+// empty. It leaves malformed data in place and refuses the replacement.
 func KeepUnparsed(path string, parses Valid) error {
-	b, err := steady.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if len(bytes.TrimSpace(b)) == 0 || parses(b) {
-		return nil
-	}
-	_, err = KeepBad(path, b)
-	return err
+	return Keep(path, func(b []byte) bool { return len(bytes.TrimSpace(b)) == 0 || parses(b) }, 0)
 }
 
 // now is time.Now; a test stands in for it.
 var now = time.Now
-
-// KeepBad copies b, path's contents that aren't valid, aside as
-// path.bad-<time> and gives that name. Two bad files within one second
-// are both kept (.bad-<time>-2, …); the same bad bytes kept already,
-// under any time, are not kept again.
-func KeepBad(path string, b []byte) (string, error) {
-	if name := keptAlready(path, b); name != "" {
-		return name, nil
-	}
-	stamp := path + ".bad-" + now().Format("20060102-150405")
-	for i := 1; i < 1000; i++ {
-		name := stamp
-		if i > 1 {
-			name += "-" + strconv.Itoa(i)
-		}
-		if _, err := os.Lstat(name); err == nil {
-			continue
-		}
-		f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if errors.Is(err, fs.ErrExist) {
-			continue
-		}
-		if err != nil {
-			log.Printf("%s can't be read and couldn't be kept: %v", filepath.Base(path), err)
-			return "", err
-		}
-		_, err = f.Write(b)
-		if err == nil {
-			err = steady.Sync(f)
-		}
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			os.Remove(name)
-			log.Printf("%s can't be read and couldn't be kept: %v", filepath.Base(path), err)
-			return "", err
-		}
-		log.Printf("%s can't be read (%s); it is kept as %s", filepath.Base(path), describe(b), filepath.Base(name))
-		return name, nil
-	}
-	return "", fmt.Errorf("%s can't be read and there is no free name to keep it under", filepath.Base(path))
-}
-
-// keptAlready gives the name of a copy of b kept aside for path before,
-// whatever second it was kept in, or "" when there is none.
-func keptAlready(path string, b []byte) string {
-	names, _ := filepath.Glob(globEscape(path) + ".bad-*")
-	for _, name := range names {
-		if fi, err := os.Stat(name); err != nil || fi.Size() != int64(len(b)) {
-			continue
-		}
-		if old, err := os.ReadFile(name); err == nil && bytes.Equal(old, b) {
-			return name
-		}
-	}
-	return ""
-}
-
-// globEscape quotes the characters filepath.Glob treats as a pattern, so a
-// folder named with [ or * is matched as it is.
-func globEscape(s string) string {
-	if runtime.GOOS == "windows" {
-		return strings.NewReplacer("[", "[[]", "*", "[*]", "?", "[?]").Replace(s)
-	}
-	return strings.NewReplacer(`\`, `\\`, "[", `\[`, "*", `\*`, "?", `\?`).Replace(s)
-}
 
 // A Note is one file read back from its last good generation.
 type Note struct {

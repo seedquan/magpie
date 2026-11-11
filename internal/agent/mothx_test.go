@@ -260,7 +260,7 @@ func TestMothX(t *testing.T) {
 		t.Fatal("setting the level it has wrote")
 	}
 	// back as it was but for what the user added, and Disconnect then
-	// gives back their file byte for byte
+	// restores their configuration values without a snapshot
 	edit.DelJSON(path, "providers.magpie.headers")
 	edit.DelJSON(path, "providers.magpie.thinkingFormat")
 	if err := a.Disconnect(); err != nil {
@@ -269,7 +269,7 @@ func TestMothX(t *testing.T) {
 	if a.Wired() {
 		t.Fatal("still connected")
 	}
-	if b := readFile(path); b != user {
+	if b := readFile(path); !sameJSONText(t, b, user) {
 		t.Fatalf("settings.json not as it was:\n%s", b)
 	}
 	if _, err := os.Stat(path + ".before-magpie"); !os.IsNotExist(err) {

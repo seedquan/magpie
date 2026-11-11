@@ -85,37 +85,32 @@ var installMu sync.Mutex
 func runBun(ctx context.Context, bun string, args ...string) ([]byte, error) {
 	installMu.Lock()
 	defer installMu.Unlock()
-	mendPackageJSON()
-	defer mendPackageJSON()
+	if err := mendPackageJSON(); err != nil {
+		return nil, err
+	}
 	mendDist(ctx, bun)
-	return bunCommand(ctx, bun, Dir(), args...).CombinedOutput()
+	out, err := bunCommand(ctx, bun, Dir(), args...).CombinedOutput()
+	return out, errors.Join(err, mendPackageJSON())
 }
 
-// mendPackageJSON cuts what follows plugins/package.json's object off. Bun
-// on Windows can write a shorter package.json over a longer one without
-// truncating it (klmno1993, plugins#405: a bun remove left the old file's
-// last 56 bytes after the closing brace), and every bun add after it
-// fails on bun's "failed to read/parse package.json", whatever
-// the plugin. The object is kept as written; the whole file is kept as
-// package.json.broken. A file whose start isn't an object is left alone.
-// installMu held.
-func mendPackageJSON() {
+// mendPackageJSON validates the whole manifest before Bun can change it.
+// A shorter write over a longer file can leave an invalid tail (plugins#405).
+// Without a recovery copy, that file must be repaired explicitly, never
+// truncated automatically. installMu held.
+func mendPackageJSON() error {
 	pj := filepath.Join(Dir(), "package.json")
 	b, err := os.ReadFile(pj)
-	if err != nil || json.Valid(b) {
-		return
+	if os.IsNotExist(err) {
+		return nil
 	}
-	d := json.NewDecoder(bytes.NewReader(b))
-	var obj map[string]any
-	if d.Decode(&obj) != nil || obj == nil {
-		return
+	if err != nil {
+		return fmt.Errorf("read plugin package.json before running Bun: %w", err)
 	}
-	head := append(bytes.Clone(bytes.TrimRight(b[:d.InputOffset()], " \t\r\n")), '\n')
-	if !json.Valid(head) {
-		return
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(b, &obj); err != nil || obj == nil {
+		return fmt.Errorf("%s is not a valid JSON object; left unchanged; repair it before running Bun", pj)
 	}
-	_ = os.WriteFile(pj+".broken", b, 0o644)
-	_ = edit.WriteAtomic(pj, head)
+	return nil
 }
 
 // Dir is the folder magpie installs npm plugins into.
@@ -614,6 +609,15 @@ func Remove(ctx context.Context, name string) error {
 		return fmt.Errorf("no plugin %q", name)
 	}
 	e := l.Plugins[i]
+	if !IsPath(e.Spec) {
+		installMu.Lock()
+		err := mendPackageJSON()
+		installMu.Unlock()
+		if err != nil {
+			listMu.Unlock()
+			return err
+		}
+	}
 	l.Plugins = slices.Delete(l.Plugins, i, i+1)
 	maps.DeleteFunc(l.Prefer, func(_, s string) bool { return s == e.Spec })
 	err := save(l)
@@ -621,13 +625,14 @@ func Remove(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	var removeErr error
 	if !IsPath(e.Spec) {
 		if bun, err := Bun(ctx); err == nil {
-			_, _ = runBun(ctx, bun, "remove", "--ignore-scripts", Name(e.Spec))
+			_, removeErr = runBun(ctx, bun, "remove", "--ignore-scripts", Name(e.Spec))
 		}
 	}
 	Restart()
-	return nil
+	return removeErr
 }
 
 // SetOff turns a plugin off or back on.
@@ -734,7 +739,7 @@ func Called(pkg, name string) bool {
 
 // install puts an npm package into plugins/ with bun add, its scripts
 // left unrun as OpenCode leaves them.
-func install(ctx context.Context, spec string) error {
+func install(ctx context.Context, spec string) (err error) {
 	bun, err := Bun(ctx)
 	if err != nil {
 		return err
@@ -756,8 +761,10 @@ func install(ctx context.Context, spec string) error {
 		}
 	}
 	defer installMu.Unlock()
-	mendPackageJSON()
-	defer mendPackageJSON()
+	if err := mendPackageJSON(); err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, mendPackageJSON()) }()
 	// the clone bun resolves a git spec through may be stale, its refs
 	// still at the first install's: fetched here so a fresh resolve (an
 	// add after a remove, a plugin installed again for being missing)

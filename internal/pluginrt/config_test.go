@@ -95,8 +95,8 @@ func TestSettleAndSet(t *testing.T) {
 	if err != nil || f.Preset != PresetEssentials || len(f.Plugins) != 2 || *f.Plugins[0].Enabled || f.Plugins[0].ID != "extra" {
 		t.Fatalf("after sets: %+v %v", f, err)
 	}
-	if _, err := os.Stat(Path() + ".bak"); err != nil {
-		t.Fatalf("no .bak: %v", err)
+	if _, err := os.Stat(Path() + ".bak"); !os.IsNotExist(err) {
+		t.Fatalf("a .bak was generated: %v", err)
 	}
 	// Essentials the user picked is theirs: the next start keeps it
 	if wrote, _ := Settle(); wrote {
@@ -130,8 +130,8 @@ func TestSettleBringsUpAnEssentialsInstall(t *testing.T) {
 			t.Fatalf("%s: %+v", c.ID, c)
 		}
 	}
-	if b, _ := os.ReadFile(Path() + ".bak"); string(b) != old {
-		t.Fatalf("the old file not kept: %q", b)
+	if _, err := os.Stat(Path() + ".bak"); !os.IsNotExist(err) {
+		t.Fatalf("a .bak was generated: %v", err)
 	}
 }
 

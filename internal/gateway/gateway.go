@@ -886,10 +886,6 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	// and counts the calls those plugins' accounts made outside magpie
 	// (Cursor's editor and cursor-agent) on the Usage page
 	go usage.KeepOutsideCallsRead(ctx)
-	// and moves the built-in subscriptions being retired onto their plugins
-	go provider.KeepRetiringMoved(ctx)
-	// and fetches the partner list every hour, asked for or not
-	go provider.KeepPartnersFresh(ctx)
 	go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
 	// and renews the plugins' sign-ins as they come due, used or not (#5080)
 	go provider.KeepPluginsSignedIn(ctx)
@@ -899,9 +895,6 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go provider.KeepListsFresh(ctx)
 	// and follows a Remote magpie's list as it changes there (KaCli)
 	go provider.KeepRemoteListsFollowed(ctx)
-	// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
-	go plugin.KeepUpdated(ctx)
-	go plugin.KeepBunUpdated(ctx)
 	// and, when settings say to, keeps the computer awake while agents work
 	go awake.Keep(ctx, func() awake.Level {
 		switch set := settings.Load(); {

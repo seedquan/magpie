@@ -99,10 +99,10 @@ func TestMu(t *testing.T) {
 	if a.Wired() {
 		t.Fatal("still connected")
 	}
-	if b := readFile(settings); b != userSettings {
+	if b := readFile(settings); !sameJSONText(t, b, userSettings) {
 		t.Fatalf("settings.json not as it was:\n%s", b)
 	}
-	if b := readFile(models); b != userModels {
+	if b := readFile(models); !sameJSONText(t, b, userModels) {
 		t.Fatalf("models.json not as it was:\n%s", b)
 	}
 	if b := readFile(filepath.Join(home, ".mu", "mu.json")); b != judge {

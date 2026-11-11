@@ -498,6 +498,21 @@ func TestDistLockBehindPackageJSONIsMended(t *testing.T) {
 			}
 
 			breakLock()
+			if c.tail {
+				manifest := filepath.Join(Dir(), "package.json")
+				before, err := os.ReadFile(manifest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := Add(ctx, zcode); err == nil || !strings.Contains(err.Error(), "repair") {
+					t.Fatalf("malformed manifest did not block Add: %v", err)
+				}
+				after, err := os.ReadFile(manifest)
+				if err != nil || !bytes.Equal(before, after) {
+					t.Fatalf("malformed manifest changed: %v", err)
+				}
+				return
+			}
 			if _, err := Add(ctx, zcode); err != nil {
 				t.Fatalf("Add with the lock behind package.json: %v", err)
 			}

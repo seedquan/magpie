@@ -9,7 +9,7 @@ import (
 // usage-computer.json holds the id this computer's synced days are under.
 // One that doesn't parse was written over with a new id and no copy
 // (#2263): it is copied aside first.
-func TestUnreadComputerKeptAside(t *testing.T) {
+func TestUnreadComputerLeftIntact(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	p := filepath.Join(dir(), "usage-computer.json")
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
@@ -23,10 +23,10 @@ func TestUnreadComputerKeptAside(t *testing.T) {
 		t.Fatal("no id")
 	}
 	bad, _ := filepath.Glob(p + ".bad-*")
-	if len(bad) != 1 {
-		t.Fatalf("kept aside: %v", bad)
+	if len(bad) != 0 {
+		t.Fatalf("created recovery copies: %v", bad)
 	}
-	if b, _ := os.ReadFile(bad[0]); string(b) != was {
-		t.Fatalf("kept aside as %q, want %q", b, was)
+	if b, _ := os.ReadFile(p); string(b) != was {
+		t.Fatal("damaged identity was overwritten")
 	}
 }

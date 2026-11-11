@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// mcp-signins.json zeroed by a crash (#1505) is its last good generation;
-// with none, a sign-out doesn't write none over sign-ins that don't read.
+// mcp-signins.json zeroed by a crash (#1505) can read an existing legacy
+// backup; with none, a sign-out doesn't overwrite sign-ins that don't read.
 func TestZeroedMCPSignInsReadFromBackup(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
@@ -18,14 +18,27 @@ func TestZeroedMCPSignInsReadFromBackup(t *testing.T) {
 		if err := update(func(m map[string]*Record) bool { m[n] = &Record{URL: "https://" + n + ".invalid/mcp"}; return true }); err != nil {
 			t.Fatal(err)
 		}
+		if n == "a" {
+			legacy, err := os.ReadFile(path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path()+".bak", legacy, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	zeroed := make([]byte, 900)
-	os.WriteFile(path(), zeroed, 0o600)
+	if err := os.WriteFile(path(), zeroed, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := Get("a"); !ok {
 		t.Fatal("a zeroed mcp-signins.json read as no sign-in to a")
 	}
 
-	os.Remove(path() + ".bak")
+	if err := os.Remove(path() + ".bak"); err != nil {
+		t.Fatal(err)
+	}
 	if err := SignOut("b"); err == nil {
 		t.Fatal("a sign-out over sign-ins that don't read said done")
 	}

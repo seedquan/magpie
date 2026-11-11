@@ -43,8 +43,8 @@ func TestSetupRestore(t *testing.T) {
 	if !slices.Equal(res.Missing, []string{"mcp:gone"}) {
 		t.Errorf("missing %v", res.Missing)
 	}
-	if res.Backup == "" {
-		t.Error("nothing kept aside")
+	if res.Backup != "" {
+		t.Errorf("restore reported a snapshot: %q", res.Backup)
 	}
 	l, _ := load()
 	if s := l.server("fs"); !slices.Equal(s.Agents, []string{"claude", "codex"}) {
@@ -72,16 +72,8 @@ func TestSetupRestore(t *testing.T) {
 	if s := read(t, filepath.Join(h, ".claude.json")); !strings.Contains(s, `"fs"`) || !strings.Contains(s, `"new"`) {
 		t.Errorf("claude's servers:\n%s", s)
 	}
-	// the library's own text it had is kept aside
-	found := false
-	es, _ := os.ReadDir(BackupDir())
-	for _, e := range es {
-		if read(t, filepath.Join(BackupDir(), e.Name(), "library", "instructions.md")) == "Use spaces.\n" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("the library's instructions weren't kept aside")
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("restore created snapshots: %v, %v", es, err)
 	}
 
 	// an empty library is an empty setup

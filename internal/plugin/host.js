@@ -892,12 +892,9 @@ function tunnel(which, host, port) {
 
 // ---- auth.json ---------------------------------------------------------------
 
-// A crash can leave plugin-auth.json at its full length with every byte
-// zero (#1505). Such a file is unknown, never "no sign-ins": it is read
-// from its last good generation, plugin-auth.json.bak, which each write
-// keeps first; a write over one that doesn't read copies it aside
-// (plugin-auth.json.bad-<time>) first, and never writes none over it. As
-// internal/lastgood does for magpie's own files.
+// A damaged plugin-auth.json can still be read from an existing .bak.
+// This fork creates no recovery copies and refuses to overwrite a damaged
+// primary, matching internal/lastgood's write guard.
 
 // parseAuth is the sign-ins in text, null when it isn't one JSON object.
 function parseAuth(text) {
@@ -1058,64 +1055,14 @@ async function writeDurable(p, data) {
   }
 }
 
-// badStamp is the time a bad file is kept under, as Go's lastgood names it.
-function badStamp(d = new Date()) {
-  const p = (n) => String(n).padStart(2, "0")
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-}
-
-// keepBad copies buf, a plugin-auth.json that doesn't read, aside: two
-// within one second are both kept (-2, …), the same bytes kept already
-// not again.
-function keepBad(buf) {
-  const stamp = authPath + ".bad-" + badStamp()
-  for (let i = 1; i < 1000; i++) {
-    const name = i > 1 ? `${stamp}-${i}` : stamp
-    let f
-    try {
-      f = fs.openSync(name, "wx", 0o600)
-    } catch (e) {
-      if (e?.code !== "EEXIST") throw e
-      let old = null
-      try {
-        old = fs.readFileSync(name)
-      } catch {}
-      if (old && old.equals(buf)) return name
-      continue
-    }
-    try {
-      for (let off = 0; off < buf.length; ) off += fs.writeSync(f, buf, off, buf.length - off)
-      fs.fsyncSync(f)
-    } catch (e) {
-      fs.closeSync(f)
-      try {
-        fs.unlinkSync(name)
-      } catch {}
-      throw e
-    }
-    fs.closeSync(f)
-    toErr(`plugin-auth.json can't be read (${describeBad(buf)}); it is kept as ${path.basename(name)}`)
-    return name
-  }
-  throw new Error("plugin-auth.json can't be read and there is no free name to keep it under")
-}
-
-// keepAuth is called before plugin-auth.json is replaced: the file there
-// now becomes plugin-auth.json.bak when it reads, or is copied aside when
-// it doesn't. A failure stops the write.
+// keepAuth validates the current file without making a recovery copy.
+// Legacy .bak files remain readable, but a damaged primary must be repaired
+// explicitly before any credentials can be saved over it.
 async function keepAuth() {
   const buf = await readFileSteadyAsync(authPath)
-  if (buf === null) return
-  if (!parseAuth(buf.toString("utf8"))) {
-    keepBad(buf)
-    return
+  if (buf !== null && !parseAuth(buf.toString("utf8"))) {
+    throw new Error("plugin-auth.json can't be read; repair it before saving (recovery copies are disabled)")
   }
-  const bak = authPath + ".bak"
-  let old = null
-  try {
-    old = fs.readFileSync(bak)
-  } catch {}
-  if (!old || !old.equals(buf)) await writeDurable(bak, buf)
 }
 
 async function writeAuth(all) {

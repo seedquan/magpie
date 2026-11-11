@@ -99,6 +99,7 @@ let adding = false; // the preset sheet is open
 let partnersCounted = null;
 // the Partners heading's light has run since the sheet opened (shinePartners)
 let partnersShone = false;
+let partnersFetching = false;
 let importing = null; // a magpie://import link waiting for a yes: { provider, error, replaces }
 let importingApps = null; // the Import from other apps dialog: { sources, picks }
 let providerDiscovery = []; // only opaque fingerprints and app names, never credentials
@@ -7218,6 +7219,25 @@ function renderAdd() {
     head.append(x);
   }
   sheet.append(head);
+  const partnerActions = el("div", "row-head");
+  const fetchPartners = el("button", "text", t("Fetch partner list"));
+  fetchPartners.id = "fetchPartners";
+  fetchPartners.disabled = partnersFetching;
+  fetchPartners.title = t("Fetch the official partner list only when clicked. Automatic fetching is off.");
+  fetchPartners.onclick = async () => {
+    if (partnersFetching) return;
+    partnersFetching = fetchPartners.disabled = true;
+    try {
+      providers = await api("partners/refresh", {});
+      renderProviders();
+    } catch (e) { statusErr(e); }
+    finally {
+      partnersFetching = false;
+      if (adding) renderAdd();
+    }
+  };
+  partnerActions.append(fetchPartners);
+  sheet.append(partnerActions);
   const tiles = el("div", "tiles");
   sheet.append(tiles);
   const drawTiles = () => {
@@ -7259,7 +7279,7 @@ function renderAdd() {
       partnersCounted ??= new Set();
       const fresh = partners.filter((p) => !partnersCounted.has(p.id));
       for (const p of fresh) partnersCounted.add(p.id);
-      countPartner("shown", fresh.map((p) => p.id));
+      if (fresh.length) api("partner", { what: "shown", ids: fresh.map((p) => p.id) }).catch(() => {});
       // shown, they are new no more (provider.NoticePartners)
       for (const p of partners) p.new = false;
       markNewPartners();

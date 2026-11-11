@@ -177,8 +177,8 @@ func TestWSLServers(t *testing.T) {
 }
 
 // The shared instructions, and what one WSL agent gets besides, go into
-// its file in the distro; the files magpie keeps of it are named without
-// the colon Windows can't have in a name.
+// its file in the distro; the extra instructions magpie keeps for it are
+// named without the colon Windows can't have in a name.
 func TestWSLInstructions(t *testing.T) {
 	h := wslSandbox(t)
 	write(t, filepath.Join(h, ".codex/AGENTS.md"), "Mine.\n")
@@ -192,17 +192,25 @@ func TestWSLInstructions(t *testing.T) {
 	if s := read(t, filepath.Join(h, ".claude/CLAUDE.md")); !strings.Contains(s, "Be brief.") || strings.Contains(s, "apt") {
 		t.Errorf("claude@wsl CLAUDE.md:\n%s", s)
 	}
-	// what it gets besides, and its file kept before the change
-	for _, dir := range []string{filepath.Dir(extraPath(wslCodex)), res.Backup} {
-		es, _ := os.ReadDir(dir)
-		var names []string
-		for _, e := range es {
-			names = append(names, e.Name())
-		}
-		if !slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, "codex@wsl") && !strings.Contains(n, ":") }) ||
-			slices.ContainsFunc(names, func(n string) bool { return strings.Contains(n, ":") }) {
-			t.Errorf("%s: %v", dir, names)
-		}
+	// what it gets besides is saved without a persistent recovery snapshot
+	dir := filepath.Dir(extraPath(wslCodex))
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range es {
+		names = append(names, e.Name())
+	}
+	if !slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, "codex@wsl") && !strings.Contains(n, ":") }) ||
+		slices.ContainsFunc(names, func(n string) bool { return strings.Contains(n, ":") }) {
+		t.Errorf("%s: %v", dir, names)
+	}
+	if res.Backup != "" {
+		t.Errorf("instruction edit reported a snapshot: %q", res.Backup)
+	}
+	if es, err := os.ReadDir(BackupDir()); len(es) != 0 || err != nil && !os.IsNotExist(err) {
+		t.Errorf("instruction edit created snapshots: %v, %v", es, err)
 	}
 	// a setup carried elsewhere keeps what it gets besides
 	if x := extras(); x[wslCodex] != extra {

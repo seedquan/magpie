@@ -170,7 +170,7 @@ func TestAutoResetKeptPastRestart(t *testing.T) {
 // codex-resets-used.json's is: read as none it would have the week's
 // auto-use spend a second reset, and the write would take the evidence
 // with it. The use itself is still kept.
-func TestAutoResetUnreadableKeptAside(t *testing.T) {
+func TestAutoResetUnreadableLeftIntact(t *testing.T) {
 	signIn(t)
 	if err := SetCodexAutoReset("me@example.com", true); err != nil {
 		t.Fatal(err)
@@ -192,10 +192,10 @@ func TestAutoResetUnreadableKeptAside(t *testing.T) {
 		t.Fatalf("the week used up: %+v %v", out, err)
 	}
 	aside, _ := filepath.Glob(p + ".bad-*")
-	if len(aside) != 1 {
+	if len(aside) != 0 {
 		t.Fatalf("the unreadable file was written over with nothing kept aside: %v", aside)
 	}
-	if kept, _ := os.ReadFile(aside[0]); string(kept) != bad {
+	if kept, _ := os.ReadFile(p); string(kept) != bad {
 		t.Fatalf("the copy holds %q, want the unreadable bytes", kept)
 	}
 	// and the use itself is kept: read afresh, no second one this week

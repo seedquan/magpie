@@ -4,17 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
-	"github.com/yetone/magpie/internal/proc"
-	"github.com/yetone/magpie/internal/settings"
 )
 
 // Zed has no plugin of bili's. Its README lists it with two routes: the
@@ -26,9 +20,8 @@ import (
 // http://127.0.0.1:8787/bili/<the address>, with bili's daemon (bili start)
 // answering there. That is what magpie writes into Zed's magpie provider
 // (agent.ZedThrough, which keeps it across picks and syncs and saves the
-// key for it, Zed looking that up by the address). magpie keeps a bili
-// start of its own running while such an agent is on (keepBiliServe, from
-// KeepLinked), ended with magpie; one the user started is used as it is.
+// key for it, Zed looking that up by the address). This fork only uses a
+// daemon the user already started; magpie never manages its process.
 
 // biliOrigin is where bili start listens: 8787, the port bili keeps for
 // it (its lanes take 18787 and up).
@@ -84,90 +77,18 @@ var biliServing = func() bool {
 	return res.StatusCode == http.StatusOK && json.NewDecoder(res.Body).Decode(&h) == nil && h.OK
 }
 
-// biliServer is the bili start magpie runs: under ctx (KeepLinked's,
-// which ends with magpie), stopped by cancel.
-var biliServer struct {
-	sync.Mutex
-	ctx    context.Context
-	cancel context.CancelFunc
-}
-
-func biliServeLog() string { return filepath.Join(settings.Dir(), "bili-start.log") }
-
-// biliWait is how long a bili start just run has to answer.
-var biliWait = 20 * time.Second
-
-// biliServe has bili start answer at biliOrigin: one there already is
-// used as it is, else magpie runs its own. A var for tests.
-var biliServe = func(bin string) error {
-	biliServer.Lock()
-	defer biliServer.Unlock()
+// biliServe only reuses an existing daemon. Launching the external CLI
+// could start its own updater; daemon lifecycle stays with the user.
+// A var for tests.
+var biliServe = func(_ string) error {
 	if biliServing() {
 		return nil
 	}
-	if biliServer.cancel != nil {
-		// magpie's own, which stopped answering
-		biliServer.cancel()
-		biliServer.cancel = nil
-	}
-	parent := biliServer.ctx
-	if parent == nil {
-		parent = context.Background()
-	}
-	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
-		return err
-	}
-	out, err := os.Create(biliServeLog())
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithCancel(parent)
-	cmd := proc.CommandContext(ctx, bin, "start", "--port", "8787")
-	cmd.Stdin = nil
-	cmd.Stdout, cmd.Stderr = out, out
-	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"))
-	if err := cmd.Start(); err != nil {
-		cancel()
-		out.Close()
-		return fmt.Errorf("bili start: %w", err)
-	}
-	done := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		out.Close()
-		close(done)
-	}()
-	biliServer.cancel = cancel
-	for end := time.Now().Add(biliWait); time.Now().Before(end); {
-		if biliServing() {
-			return nil
-		}
-		select {
-		case <-done:
-			end = time.Time{}
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
-	cancel()
-	biliServer.cancel = nil
-	said, _ := os.ReadFile(biliServeLog())
-	why := lastLines(strings.TrimSpace(string(said)), 3)
-	if why == "" {
-		why = "nothing answered"
-	}
-	return fmt.Errorf("bili start didn't answer at %s: %s", biliOrigin, why)
+	return fmt.Errorf("billion-context is not answering at %s; start it yourself before enabling this connection", biliOrigin)
 }
 
-// biliStop ends the bili start magpie runs, if it runs one. A var for
-// tests.
-var biliStop = func() {
-	biliServer.Lock()
-	defer biliServer.Unlock()
-	if biliServer.cancel != nil {
-		biliServer.cancel()
-		biliServer.cancel = nil
-	}
-}
+// biliStop never stops a daemon owned by the user. A var for tests.
+var biliStop = func() {}
 
 // biliURLOn is whether any agent here goes through bili's prefix.
 func biliURLOn(agents []*agent.Agent) bool {
@@ -179,9 +100,8 @@ func biliURLOn(agents []*agent.Agent) bool {
 	return false
 }
 
-// setBiliURL puts an agent's magpie provider through bili's prefix, with
-// bili start answering there first, or back on the gateway, and ends
-// magpie's bili start when nothing goes through it any more.
+// setBiliURL puts an agent's magpie provider through an existing daemon's
+// prefix, or back on the gateway. The daemon remains owned by the user.
 func setBiliURL(a *agent.Agent, agents []*agent.Agent, bin string, on bool) (*BiliView, error) {
 	b := newBackups()
 	if err := b.keep(a.ID, a.Path); err != nil {
@@ -211,23 +131,6 @@ func setBiliURL(a *agent.Agent, agents []*agent.Agent, bin string, on bool) (*Bi
 	return v, nil
 }
 
-// keepBiliServe, from KeepLinked, keeps bili start answering while an
-// agent goes through its prefix: at magpie's start, and after it stopped.
-// ctx is KeepLinked's, which ends magpie's bili start with magpie.
-func keepBiliServe(ctx context.Context) {
-	biliServer.Lock()
-	if biliServer.ctx == nil {
-		biliServer.ctx = ctx
-	}
-	biliServer.Unlock()
-	if !biliURLOn(detected()) {
-		return
-	}
-	bin := biliPath()
-	if bin == "" || biliServing() {
-		return
-	}
-	if err := biliServe(bin); err != nil {
-		log.Println("library: billion-context:", err)
-	}
-}
+// keepBiliServe is disabled: startup and periodic work never launch or
+// restart an external daemon that may manage its own updates.
+func keepBiliServe(context.Context) {}

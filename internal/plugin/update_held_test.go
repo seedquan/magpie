@@ -133,8 +133,8 @@ func TestUpdateBunHoldsBackSaysWhy(t *testing.T) {
 		t.Fatalf("Update all: %v, want bun's reason", err)
 	}
 	u, err := CheckUpdates(ctx)
-	if err == nil || !strings.Contains(err.Error(), "minimum-release-age") {
-		t.Fatalf("the hourly update: %v, want bun's reason", err)
+	if err != nil || len(u.Waiting) != 1 {
+		t.Fatalf("check should only report the update: %+v, %v", u, err)
 	}
 	if len(u.Updated) != 0 {
 		t.Fatalf("the hourly update said it updated: %+v", u.Updated)

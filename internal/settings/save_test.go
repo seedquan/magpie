@@ -70,7 +70,7 @@ func TestSaveKeepsCorruptSettings(t *testing.T) {
 	}
 }
 
-func TestSaveRecoversEmptySettings(t *testing.T) {
+func TestSaveKeepsEmptySettings(t *testing.T) {
 	for _, body := range []string{"", " \t\r\n", "\ufeff", "\ufeff \t\r\n"} {
 		t.Run(body, func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -82,11 +82,14 @@ func TestSaveRecoversEmptySettings(t *testing.T) {
 			}
 			s := Load()
 			s.Theme, s.NoAutoUpdate = "light", true
-			if err := Save(s); err != nil {
-				t.Fatal(err)
+			if err := Save(s); err == nil {
+				t.Error("empty settings were overwritten without explicit repair")
 			}
-			if got := Load(); got.Theme != "light" || !got.NoAutoUpdate {
-				t.Fatal("the preference change was not saved to the empty file")
+			if after, err := os.ReadFile(Path()); err != nil || !bytes.Equal(after, []byte(body)) {
+				t.Fatalf("empty original changed: %v", err)
+			}
+			if _, err := os.Stat(Path() + ".bak"); !os.IsNotExist(err) {
+				t.Fatalf("recovery copy created: %v", err)
 			}
 		})
 	}

@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Fetch partner list": "获取合作商列表",
+    "Fetch the official partner list only when clicked. Automatic fetching is off.": "仅点击时获取官方合作商列表，自动获取已关闭。",
     "Nothing more was kept of this request": "这个请求没有更多记录",
     "Codex service tier": "Codex 服务层级",
     "As Codex asks": "按 Codex 的请求",
@@ -4905,6 +4907,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Fetch partner list": "取得合作商清單",
+    "Fetch the official partner list only when clicked. Automatic fetching is off.": "僅點擊時取得官方合作商清單，自動取得已關閉。",
     "Nothing more was kept of this request": "這個請求沒有更多記錄",
     "Codex service tier": "Codex 服務層級",
     "As Codex asks": "依 Codex 的請求",
@@ -9791,6 +9795,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Fetch partner list": "パートナー一覧を取得",
+    "Fetch the official partner list only when clicked. Automatic fetching is off.": "クリックしたときだけ公式のパートナー一覧を取得します。自動取得は無効です。",
     "Nothing more was kept of this request": "このリクエストについてこれ以上の記録はありません",
     "Codex service tier": "Codex のサービスティア",
     "As Codex asks": "Codex の指定どおり",
@@ -14679,6 +14685,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Fetch partner list": "Partnerliste abrufen",
+    "Fetch the official partner list only when clicked. Automatic fetching is off.": "Die offizielle Partnerliste wird nur per Klick abgerufen. Der automatische Abruf ist ausgeschaltet.",
     "Nothing more was kept of this request": "Zu dieser Anfrage wurde nichts weiter gespeichert",
     "Codex service tier": "Codex-Servicestufe",
     "As Codex asks": "Wie Codex es anfragt",

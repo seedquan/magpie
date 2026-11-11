@@ -11,7 +11,7 @@ import (
 // write put that over it: every other account's, site's or day's record
 // was gone, with no copy (#2263). What was there is copied aside first,
 // valid JSON of another shape (an array for a map) too.
-func TestUnreadStateKeptAside(t *testing.T) {
+func TestUnreadStateLeftIntact(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		path  func() string
@@ -41,14 +41,14 @@ func TestUnreadStateKeptAside(t *testing.T) {
 				}
 				c.write()
 				bad, _ := filepath.Glob(p + ".bad-*")
-				if len(bad) != 1 {
+				if len(bad) != 0 {
 					t.Fatalf("kept aside: %v", bad)
 				}
-				if b, _ := os.ReadFile(bad[0]); string(b) != was {
+				if b, _ := os.ReadFile(p); string(b) != was {
 					t.Fatalf("kept aside as %q, want %q", b, was)
 				}
-				if b, _ := os.ReadFile(p); string(b) == was {
-					t.Fatal("the write didn't happen")
+				if b, _ := os.ReadFile(p); string(b) != was {
+					t.Fatal("damaged original was overwritten")
 				}
 			})
 		}

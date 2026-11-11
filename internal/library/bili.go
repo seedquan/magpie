@@ -27,9 +27,9 @@ import (
 // agent's context as it runs: old turns are folded into summaries the
 // model can open again (compress, decompress, search_context), so a long
 // session stays under the window. Its native plugins are written into an
-// agent's own files by its own installer (bili plugin install <agent>);
-// magpie runs that for the agents switched on, and bili plugin remove for
-// those switched off.
+// agent's own files by its own installer (bili plugin install <agent>).
+// That installer creates persistent recovery copies, so this fork refuses
+// native installs. A recorded legacy install can be undone locally.
 //
 // Only the agents where bili's plugin works with magpie in front are
 // offered: Pi, omp and OpenCode load it in process, and their requests
@@ -49,23 +49,9 @@ import (
 // in Pi's settings.json and "extensions:" in omp's config.yml, and after
 // magpie rewrote Claude Code's settings.json it took ANTHROPIC_BASE_URL out
 // altogether (the agent then went to Anthropic) and put back the
-// DISABLE_AUTO_COMPACT it had added. So magpie keeps each file as it was
-// before the install and as the install left it, and after a remove puts
-// back what the install changed and nothing changed since (biliRestore).
-
-// Claude Code's auto-compaction stays on beside bili's plugin. bili's
-// install writes DISABLE_AUTO_COMPACT=1, so a session bili doesn't
-// compress has nothing left to keep it under the window: Claude Desktop's
-// Code tab runs Claude Code on the same settings.json with its own base
-// URL, past bili's proxy (bili's #2290), and a window bili takes larger
-// than the one magpie serves lets the session reach it first. Claude Code
-// then answers each message at once with "Prompt is too long", sending
-// nothing. magpie sets the "1" bili added to "0", which bili leaves as a
-// value of the user's (and keeps across its SessionStart hook and a
-// reinstall): auto-compaction fires only at the window magpie wrote
-// (CLAUDE_CODE_AUTO_COMPACT_WINDOW), which bili, when it compresses,
-// keeps the session under. A value the user had before the install is
-// left as theirs.
+// DISABLE_AUTO_COMPACT it had added. Legacy records retain each file before
+// and after the install. Local undo restores only what is still known to
+// be the install's change (biliRestore), leaving the old records untouched.
 
 // BiliURL is billion-context's page.
 const BiliURL = "https://github.com/ranxianglei/billion-context"
@@ -275,50 +261,44 @@ func biliShown(c []string) string {
 	return strings.Join(c, " ")
 }
 
-// biliState is each file of an agent bili's install wrote, as it was
-// before (nil: not there) and as the install left it.
+// biliFile is a legacy record of each file bili's install wrote, as it was
+// before (nil: not there) and as the install left it. No new records are made.
 type biliFile struct {
 	Path   string  `json:"path"`
 	Before *string `json:"before"`
 	After  *string `json:"after"`
-	// Marks are the .bili-bak and .bili-last bili keeps beside it that
-	// weren't there before the install: taken away with it
+	// Marks are old .bili-bak and .bili-last paths. They are never removed.
 	Marks []string `json:"marks,omitempty"`
 }
 
 func biliStateFile() string { return filepath.Join(settings.Dir(), "bili-plugins.json") }
 
-func readBiliState() map[string][]biliFile {
+func readBiliState() (map[string][]biliFile, error) {
 	m := map[string][]biliFile{}
-	if b, err := os.ReadFile(biliStateFile()); err == nil {
-		_ = json.Unmarshal(b, &m)
-	}
-	return m
-}
-
-func writeBiliState(m map[string][]biliFile) error {
-	b, err := json.MarshalIndent(m, "", "  ")
+	b, err := os.ReadFile(biliStateFile())
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("cannot read legacy billion-context state; repair it explicitly before disconnecting: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(biliStateFile()), 0o700); err != nil {
-		return err
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("cannot parse legacy billion-context state; repair it explicitly before disconnecting: %w", err)
 	}
-	return edit.WriteAtomic(biliStateFile(), b)
+	return m, nil
 }
 
-func biliRead(path string) *string {
+func biliRead(path string) (*string, error) {
 	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	s := string(b)
-	return &s
+	return &s, nil
 }
 
-// SetBili gives bili's plugin to an agent with bili's own installer, or
-// takes it away with bili's own remover and puts back what the install
-// changed in the agent's files.
+// SetBili switches URL lanes, refuses native installs, and undoes recorded
+// legacy native installs locally without running their installer or remover.
 func SetBili(id string, on bool) (*BiliView, error) {
 	biliMu.Lock()
 	defer biliMu.Unlock()
@@ -337,203 +317,149 @@ func SetBili(id string, on bool) (*BiliView, error) {
 	case a == nil:
 		return nil, fmt.Errorf("%s isn't installed", id)
 	}
-	bin := biliPath()
-	if bin == "" {
-		return nil, fmt.Errorf("billion-context isn't installed — install it first (%s)", BiliURL)
-	}
 	if url {
+		bin := biliPath()
+		if bin == "" {
+			return nil, fmt.Errorf("billion-context isn't installed — install it first (%s)", BiliURL)
+		}
 		return setBiliURL(a, agents, bin, on)
 	}
-	paths := files(a)
-	b := newBackups()
-	for _, p := range append(slices.Clone(paths), claudeJSON()) {
-		if a.ID != "claude" && p == claudeJSON() {
-			continue
-		}
-		if err := b.keep(a.ID, p); err != nil {
-			return nil, err
-		}
-	}
-	state := readBiliState()
 	if on {
-		var snap []biliFile
-		for _, p := range paths {
-			f := biliFile{Path: p, Before: biliRead(p)}
-			for _, m := range []string{p + ".bili-bak", p + ".bili-last"} {
-				if !exists(m) {
-					f.Marks = append(f.Marks, m)
-				}
-			}
-			snap = append(snap, f)
-		}
-		out, err := biliRun(bin, 2*time.Minute, "plugin", "install", biliLane(id))
-		if err != nil {
-			return nil, err
-		}
-		if id == "claude" {
-			if err := biliKeepCompact(snap[0].Path, snap[0].Before); err != nil {
-				return nil, err
-			}
-		}
-		for i := range snap {
-			snap[i].After = biliRead(snap[i].Path)
-		}
-		state[id] = snap
-		if err := writeBiliState(state); err != nil {
-			return nil, err
-		}
-		v := readBili(agents)
-		if !slices.ContainsFunc(v.Agents, func(x BiliAgent) bool { return x.ID == id && x.On }) {
-			return nil, fmt.Errorf("bili plugin install %s ran, but bili doesn't list it as installed: %s", biliLane(id), lastLines(out, 3))
-		}
-		v.Restart, v.Backup = []string{id}, b.dir
-		if b.dir != "" {
-			pruneBackups()
-		}
-		return v, nil
+		return nil, errors.New("native billion-context plugin installation is disabled because its installer creates persistent recovery copies")
 	}
-	cur := map[string]*string{}
-	for _, p := range paths {
-		cur[p] = biliRead(p)
-	}
-	if _, err := biliRun(bin, 2*time.Minute, "plugin", "remove", biliLane(id)); err != nil {
+	state, err := readBiliState()
+	if err != nil {
 		return nil, err
 	}
 	snap := state[id]
-	var errs []error
+	if len(snap) == 0 {
+		return nil, fmt.Errorf("no legacy billion-context install record for %s; remove its native integration explicitly without running the recovery-copy installer/remover", id)
+	}
+	paths := files(a)
+	cur, desired := map[string]*string{}, map[string]*string{}
 	for _, p := range paths {
 		var f *biliFile
 		for i := range snap {
 			if snap[i].Path == p {
+				if f != nil {
+					return nil, fmt.Errorf("duplicate legacy billion-context records for %s; repair the state explicitly", p)
+				}
 				f = &snap[i]
 			}
 		}
-		if err := biliRestore(p, f, cur[p], biliRead(p)); err != nil {
-			errs = append(errs, err)
+		if f == nil {
+			return nil, fmt.Errorf("no legacy billion-context install record for %s; repair the integration explicitly", p)
 		}
-		if f != nil {
-			for _, m := range f.Marks {
-				if err := os.Remove(m); err != nil && !os.IsNotExist(err) {
-					errs = append(errs, err)
-				}
+		if p == a.Path && f.After == nil {
+			return nil, fmt.Errorf("legacy billion-context record for %s has no installed configuration; repair the integration explicitly", p)
+		}
+		cur[p], err = biliRead(p)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read %s before undoing billion-context: %w", p, err)
+		}
+		desired[p], err = biliRestore(p, f, cur[p], cur[p])
+		if err != nil {
+			return nil, fmt.Errorf("cannot safely undo billion-context in %s; repair the integration explicitly: %w", p, err)
+		}
+	}
+	// Compute every result before writing any file; a later unreadable or
+	// damaged file must leave the earlier files alone too.
+	if err := edit.Atomically(func() error {
+		for _, p := range paths {
+			now, err := biliRead(p)
+			if err != nil {
+				return err
+			}
+			if !same(now, cur[p]) {
+				return fmt.Errorf("%s changed during billion-context undo; retry explicitly", p)
 			}
 		}
-	}
-	if err := errors.Join(errs...); err != nil {
-		return nil, err
-	}
-	delete(state, id)
-	if err := writeBiliState(state); err != nil {
+		for _, p := range paths {
+			out := desired[p]
+			if same(out, cur[p]) {
+				continue
+			}
+			if out == nil {
+				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+					return err
+				}
+			} else if err := edit.WriteAtomic(p, []byte(*out)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, paths...); err != nil {
 		return nil, err
 	}
 	v := readBili(agents)
-	v.Restart, v.Backup = []string{id}, b.dir
-	if b.dir != "" {
-		pruneBackups()
-	}
+	v.Restart = []string{id}
 	return v, nil
 }
 
-// biliCompact is the setting of Claude Code's that turns auto-compaction
-// off, and biliCompactOn its value magpie writes in place of bili's "1".
-const (
-	biliCompact   = "env.DISABLE_AUTO_COMPACT"
-	biliCompactOn = "0"
-)
+// keepBiliCompact no longer rewrites legacy whole-file snapshots at startup.
+func keepBiliCompact() {}
 
-// biliKeepCompact turns Claude Code's auto-compaction back on in its
-// settings.json at path after bili's install turned it off, unless
-// before (the file before the install) had a DISABLE_AUTO_COMPACT of the
-// user's own.
-func biliKeepCompact(path string, before *string) error {
-	if v, has := edit.GetJSON(path, biliCompact); !has || v != "1" {
-		return nil
+// biliRestore computes the undo without writing: only installed values
+// unchanged since the recorded install revert. Local undo passes cur as
+// now too, since no external remover is run.
+func biliRestore(p string, f *biliFile, cur, now *string) (*string, error) {
+	if f == nil {
+		return nil, errors.New("no legacy install record")
 	}
-	if b, ok := parseJSONC(before); !ok {
-		return nil
-	} else if _, had := jsonAt(b, []string{"env", "DISABLE_AUTO_COMPACT"}); had {
-		return nil
+	if same(f.Before, f.After) || same(cur, f.Before) {
+		return cur, nil
 	}
-	return edit.SetJSON(path, edit.KV{Path: biliCompact, Value: biliCompactOn})
-}
-
-// keepBiliCompact does biliKeepCompact for a Claude Code plugin magpie
-// installed before it did so itself (KeepLinked runs it at start), and has the record of the install say
-// "0" where it said bili's "1", so that switching the plugin off takes the
-// "0" away with the rest of the install.
-func keepBiliCompact() {
-	biliMu.Lock()
-	defer biliMu.Unlock()
-	state := readBiliState()
-	snap := state["claude"]
-	if len(snap) == 0 || snap[0].After == nil {
-		return
+	if cur == nil && f.After != nil {
+		return nil, errors.New("the installed file is missing")
 	}
-	f := &snap[0]
-	if v, _ := edit.GetJSON(f.Path, biliCompact); v != "1" {
-		return
-	}
-	if err := biliKeepCompact(f.Path, f.Before); err != nil {
-		return
-	}
-	if v, _ := edit.GetJSON(f.Path, biliCompact); v != biliCompactOn {
-		return
-	}
-	after, ok := parseJSONC(f.After)
-	if v, _ := jsonAt(after, []string{"env", "DISABLE_AUTO_COMPACT"}); !ok || v != "1" {
-		return
-	}
-	b, err := edit.PatchJSON([]byte(*f.After), []edit.KV{{Path: biliCompact, Value: biliCompactOn}}, nil)
-	if err != nil {
-		return
-	}
-	s := string(b)
-	f.After = &s
-	_ = writeBiliState(state)
-}
-
-// biliLane is bili's name of an agent's plugin: magpie's id, as both use it.
-func biliLane(id string) string { return id }
-
-// biliRestore writes p after bili's remove: f is the file before and after
-// the install (nil when magpie didn't install it), cur as it was just
-// before the remove and now as the remove left it. What the install changed
-// and nothing has changed since goes back to what it was; what was changed
-// since (magpie picking another model, the user) stays as the remove left
-// it; and what the remove changed that the install hadn't goes back.
-func biliRestore(p string, f *biliFile, cur, now *string) error {
 	var out *string
+	isJSON := strings.HasSuffix(p, ".json") || strings.HasSuffix(p, ".jsonc")
+	if isJSON {
+		if cur != nil && strings.TrimSpace(*cur) == "" {
+			return nil, errors.New("not JSON")
+		}
+		for _, s := range []*string{cur, f.Before, f.After} {
+			if _, ok := parseJSONC(s); !ok {
+				return nil, errors.New("not JSON")
+			}
+		}
+	}
 	switch {
-	case f != nil && same(cur, f.After):
+	case same(cur, f.After):
 		// nothing touched it since the install: as it was before, byte for byte
 		out = f.Before
-	case strings.HasSuffix(p, ".json") || strings.HasSuffix(p, ".jsonc"):
-		var before, after *string
-		if f != nil {
-			before, after = f.Before, f.After
-		}
-		s, err := biliMergeJSON(before, after, cur, now)
+	case isJSON:
+		s, err := biliMergeJSON(f.Before, f.After, cur, now)
 		if err != nil {
-			// a file magpie can't read as JSON is left as bili left it
-			return nil
+			return nil, err
 		}
 		out = s
-		if f != nil && f.Before != nil && out != nil && sameJSON(*out, *f.Before) {
+		if f.Before != nil && out != nil && sameJSON(*out, *f.Before) {
 			out = f.Before
 		}
 	default:
-		return nil
+		return nil, errors.New("the file has changes outside the recorded install")
 	}
-	if same(out, now) {
-		return nil
-	}
-	if out == nil {
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return err
+	if isJSON {
+		// A conflict or an unpatchable key can leave an installed value
+		// active. Prove the whole plan undoes it before any file is written.
+		before, _ := parseJSONC(f.Before)
+		after, _ := parseJSONC(f.After)
+		planned, ok := parseJSONC(out)
+		if !ok {
+			return nil, errors.New("the planned undo is not JSON")
 		}
-		return nil
+		var installed [][]string
+		jsonDiffs(before, after, nil, &installed)
+		for _, path := range installed {
+			want, had := jsonAt(before, path)
+			got, has := jsonAt(planned, path)
+			if had != has || !jsonEqual(want, got) {
+				return nil, errors.New("an installed value cannot be safely restored; manual repair is required before disconnecting")
+			}
+		}
 	}
-	return edit.WriteAtomic(p, []byte(*out))
+	return out, nil
 }
 
 func same(a, b *string) bool {

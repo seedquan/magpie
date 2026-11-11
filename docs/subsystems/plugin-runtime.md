@@ -441,8 +441,9 @@ remembering its layer (`Source`):
   window says it above the list and disables every switch, and the CLI exits
   with it. The user fixes the file or removes it.
 - Writes hold `filelock.Mutex` (`plugins.yml.lock`) against other magpies
-  and a mutex in the process, are written whole (temp file, sync, rename),
-  and keep the file they replace as `plugins.yml.bak`.
+  and a mutex in the process, and are written whole (temp file, sync,
+  rename). This fork creates no `plugins.yml.bak`; existing recovery
+  files are left untouched.
 - A plugin written for another major API, or a newer minor, is `failed`
   with the reason; the rest run.
 - A plugin's page whose code throws breaks only that page (the boundary

@@ -285,8 +285,8 @@ func update(change func(*File)) error {
 const header = "# magpie's built-in plugins: which are on, and each one's config.\n" +
 	"# `magpie plugin dump` shows what they come to, and where each value is from.\n"
 
-// write puts f in plugins.yml whole or not at all, the file it replaces
-// kept as plugins.yml.bak. Called with the locks held.
+// write puts f in plugins.yml whole or not at all, without a recovery copy.
+// Called with the locks held after Load validates the existing file.
 func write(f File) error {
 	b, err := yaml.Marshal(f)
 	if err != nil {
@@ -297,11 +297,6 @@ func write(f File) error {
 	defer filememo.Forget() // KeepFresh looks again (Written)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
-	}
-	if old, err := os.ReadFile(path); err == nil {
-		if err := os.WriteFile(path+".bak", old, 0o600); err != nil {
-			return fmt.Errorf("keeping %s before writing it: %w", path, err)
-		}
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".plugins.yml-*")
 	if err != nil {

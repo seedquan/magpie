@@ -107,10 +107,10 @@ func TestPrimeAgent(t *testing.T) {
 	if a.Wired() {
 		t.Fatal("still connected")
 	}
-	if b := readFile(settings); b != userSettings {
+	if b := readFile(settings); !sameJSONText(t, b, userSettings) {
 		t.Fatalf("settings.json not as it was:\n%s", b)
 	}
-	if b := readFile(models); b != userModels {
+	if b := readFile(models); !sameJSONText(t, b, userModels) {
 		t.Fatalf("models.json not as it was:\n%s", b)
 	}
 }
@@ -137,7 +137,7 @@ func TestPrimeAgentRoundTrip(t *testing.T) {
 		if err := a.Disconnect(); err != nil {
 			t.Fatal(err)
 		}
-		if b, _ := os.ReadFile(a.Path); !bytes.Equal(b, userSettings) {
+		if b, _ := os.ReadFile(a.Path); !sameJSONText(t, string(edit.TrimBOM(b)), string(edit.TrimBOM(userSettings))) {
 			t.Fatalf("round %d:\n%s", i, b)
 		}
 		// models.json wasn't there, and isn't again; nor is a copy left
@@ -205,8 +205,7 @@ func TestPrimeAgentDir(t *testing.T) {
 }
 
 // A settings.json saved with a UTF-8 BOM and CRLF line ends (#1534) is
-// put back byte for byte too, its copy from before taken away: the JSON
-// beside the BOM is what Disconnect compares.
+// restored with the same values and line style, without a recovery copy.
 func TestPrimeAgentRoundTripWithBOM(t *testing.T) {
 	home := syncHome(t)
 	a := primeAgent(home)
@@ -222,8 +221,8 @@ func TestPrimeAgentRoundTripWithBOM(t *testing.T) {
 	if err := a.Disconnect(); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(a.Path); !bytes.Equal(b, userSettings) {
-		t.Fatalf("not put back:\n%q", b)
+	if b, _ := os.ReadFile(a.Path); !sameJSONText(t, string(edit.TrimBOM(b)), string(edit.TrimBOM(userSettings))) || !bytes.HasPrefix(b, []byte("\xef\xbb\xbf")) || !bytes.Contains(b, []byte("\r\n")) {
+		t.Fatalf("values or BOM/CRLF style not put back:\n%q", b)
 	}
 	if _, err := os.Stat(a.Path + ".before-magpie"); !os.IsNotExist(err) {
 		t.Fatalf("the copy from before is left: %v", err)

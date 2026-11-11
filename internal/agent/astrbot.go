@@ -40,8 +40,8 @@ package agent
 // what they changed in magpie's own entries in AstrBot's WebUI (a source's
 // timeout or proxy, a model switched off, its extra body). A model picked
 // for one chat with /provider, which AstrBot keeps in its own database, is
-// the user's and stands. The file is copied to cmd_config.json.before-magpie
-// before magpie first writes it.
+// the user's and stands. Existing cmd_config.json.before-magpie files are
+// preserved; new connections do not create a recovery copy.
 //
 // AstrBot reads the file once, at start, and keeps it in memory: its WebUI
 // writes the whole of it back on every save. So magpie's change needs
@@ -114,7 +114,6 @@ func astrbotAt(at place) *Agent {
 	root := astrbotRoot(at)
 	data := filepath.Join(root, "data")
 	path := filepath.Join(data, "cmd_config.json")
-	backup := path + ".before-magpie"
 	// keyPick is the default chat model AstrBot was on before magpie's
 	keyPick := at.key("astrbot.provider_id")
 	key := func() string { return agentKeyAt("astrbot", at.gw()) }
@@ -227,12 +226,6 @@ func astrbotAt(at place) *Agent {
 		}
 		if !gjson.GetBytes(raw, astrbotSources).Exists() {
 			return fmt.Errorf("this AstrBot keeps no provider_sources in %s: update AstrBot to 4.10 or later, start it once, then connect it", path)
-		}
-		if !wired() {
-			b, _ := os.ReadFile(path)
-			if err := os.WriteFile(backup, b, 0o600); err != nil {
-				return err
-			}
 		}
 		if !ours() {
 			stash(map[string]string{keyPick: pick()})

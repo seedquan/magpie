@@ -10,8 +10,8 @@ import (
 
 // applied.json holds what magpie last set on every agent. A file that
 // doesn't parse is read as no record, and the next record writes that
-// over it: every other agent's record is copied aside first.
-func TestUnreadAppliedKeptAside(t *testing.T) {
+// over it in older builds. This fork leaves the unreadable file intact.
+func TestUnreadAppliedLeftIntact(t *testing.T) {
 	stashHome(t)
 	p := appliedPath()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -22,15 +22,15 @@ func TestUnreadAppliedKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	record("pi", "model", "magpie/pi-model")
-	kept := keptAside(t, p)
+	kept := originalWithoutSidecars(t, p)
 	if string(kept) != half {
-		t.Fatalf("the file kept aside isn't the one that was there: %s", kept)
+		t.Fatalf("the original file changed: %s", kept)
 	}
 	live, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(live), `"magpie/pi-model"`) {
+	if string(live) != half {
 		t.Fatalf("applied.json after the record: %s", live)
 	}
 
@@ -40,8 +40,8 @@ func TestUnreadAppliedKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	record("pi", "model", "magpie/pi-model")
-	if more, _ := filepath.Glob(p + ".bad-*"); len(more) != 1 {
-		t.Fatalf("kept aside after a good write: %v", more)
+	if more, _ := filepath.Glob(p + ".bad-*"); len(more) != 0 {
+		t.Fatalf("recovery sidecars after a good write: %v", more)
 	}
 	live, err = os.ReadFile(p)
 	if err != nil {
@@ -54,7 +54,7 @@ func TestUnreadAppliedKeptAside(t *testing.T) {
 
 // JSON that isn't the record map (an array, as a hand edit or another
 // program might leave) is not a record of what magpie set either.
-func TestUnreadAppliedArrayKeptAside(t *testing.T) {
+func TestUnreadAppliedArrayLeftIntact(t *testing.T) {
 	stashHome(t)
 	p := appliedPath()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -65,13 +65,13 @@ func TestUnreadAppliedArrayKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	record("pi", "model", "magpie/pi-model")
-	if kept := keptAside(t, p); string(kept) != string(arr) {
-		t.Fatalf("the file kept aside isn't the one that was there: %s", kept)
+	if kept := originalWithoutSidecars(t, p); string(kept) != string(arr) {
+		t.Fatalf("the original file changed: %s", kept)
 	}
 }
 
-// A copy that can't be made stops the write: the unread file stays.
-func TestUnreadAppliedNotWrittenWhenItCantBeKept(t *testing.T) {
+// An unreadable file stays intact even in a read-only folder.
+func TestUnreadAppliedInReadOnlyFolderStaysIntact(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("a directory without write permission still accepts a new name")
 	}
@@ -105,7 +105,7 @@ func TestUnreadAppliedNotWrittenWhenItCantBeKept(t *testing.T) {
 
 // wsl.json holds every distro's last probe. A file that doesn't parse is
 // read as no distro, and the next save writes that over it.
-func TestUnreadWSLConfigKeptAside(t *testing.T) {
+func TestUnreadWSLConfigLeftIntact(t *testing.T) {
 	stashHome(t)
 	p := wslStatePath()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -116,20 +116,20 @@ func TestUnreadWSLConfigKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	saveFreshWSL(t)
-	kept := keptAside(t, p)
+	kept := originalWithoutSidecars(t, p)
 	if string(kept) != half {
-		t.Fatalf("the file kept aside isn't the one that was there: %s", kept)
+		t.Fatalf("the original file changed: %s", kept)
 	}
 	live, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(live), `"Fresh"`) {
+	if string(live) != half {
 		t.Fatalf("wsl.json after the save: %s", live)
 	}
 }
 
-func TestUnreadWSLConfigArrayKeptAside(t *testing.T) {
+func TestUnreadWSLConfigArrayLeftIntact(t *testing.T) {
 	stashHome(t)
 	p := wslStatePath()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -140,8 +140,8 @@ func TestUnreadWSLConfigArrayKeptAside(t *testing.T) {
 		t.Fatal(err)
 	}
 	saveFreshWSL(t)
-	if kept := keptAside(t, p); string(kept) != string(arr) {
-		t.Fatalf("the file kept aside isn't the one that was there: %s", kept)
+	if kept := originalWithoutSidecars(t, p); string(kept) != string(arr) {
+		t.Fatalf("the original file changed: %s", kept)
 	}
 }
 
@@ -160,16 +160,16 @@ func saveFreshWSL(t *testing.T) {
 	wslSave()
 }
 
-func keptAside(t *testing.T, path string) []byte {
+func originalWithoutSidecars(t *testing.T, path string) []byte {
 	t.Helper()
 	matches, err := filepath.Glob(path + ".bad-*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(matches) != 1 {
+	if len(matches) != 0 {
 		t.Fatalf("kept aside %d copies, want 1: %v", len(matches), matches)
 	}
-	b, err := os.ReadFile(matches[0])
+	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

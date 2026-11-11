@@ -21,6 +21,10 @@ func TestZeroedSettingsReadFromBackup(t *testing.T) {
 		if err := Save(Settings{Theme: theme}); err != nil {
 			t.Fatal(err)
 		}
+		if theme == "dark" {
+			b, _ := os.ReadFile(Path())
+			os.WriteFile(Path()+".bak", b, 0o600)
+		}
 	}
 	os.WriteFile(Path(), make([]byte, 1873), 0o600)
 	if got := Load().Theme; got != "dark" {
@@ -29,13 +33,13 @@ func TestZeroedSettingsReadFromBackup(t *testing.T) {
 	if len(lastgood.Recovered()) != 1 {
 		t.Fatalf("not noted: %+v", lastgood.Recovered())
 	}
-	if err := Save(Settings{Theme: "system"}); err != nil {
-		t.Fatalf("saving over a zeroed file with a backup: %v", err)
+	if err := Save(Settings{Theme: "system"}); err == nil {
+		t.Fatal("saving over a damaged file succeeded")
 	}
-	if kept, _ := filepath.Glob(Path() + ".bad-*"); len(kept) != 1 {
-		t.Fatalf("the zeroed file not kept aside: %v", kept)
+	if kept, _ := filepath.Glob(Path() + ".bad-*"); len(kept) != 0 {
+		t.Fatalf("recovery copies generated: %v", kept)
 	}
-	if got := Load().Theme; got != "system" {
+	if got := Load().Theme; got != "dark" {
 		t.Fatalf("after a save: %q", got)
 	}
 }

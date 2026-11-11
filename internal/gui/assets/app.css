@@ -3301,6 +3301,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .sheet { padding: 6px 0 8px; flex: none; }
 .sheet .row-head { padding: 0 2px; gap: 6px; }
 .sheet .find, #view-gateway .find { height: 24px; width: 160px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); font-size: 12px; outline: none; transition: border-color .12s; }
+#addSheet > .row-head .find { min-width: 0; }
 .sheet .find:focus, #view-gateway .find:focus { border-color: var(--accent); }
 .sheet .find::placeholder, #view-gateway .find::placeholder { color: var(--faint); }
 .sheet .kind { display: flex; align-items: baseline; gap: 8px; padding: 22px 8px 6px; font-size: 12px; }

@@ -18,6 +18,10 @@ func TestZeroedPluginListReadFromBackup(t *testing.T) {
 		if err := save(l); err != nil {
 			t.Fatal(err)
 		}
+		if len(l.Plugins) == 1 {
+			b, _ := os.ReadFile(listPath())
+			os.WriteFile(listPath()+".bak", b, 0o600)
+		}
 	}
 	os.WriteFile(listPath(), make([]byte, 300), 0o600)
 	if l := list(); len(l.Plugins) != 1 || l.Plugins[0].Spec != "a" {

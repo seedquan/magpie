@@ -3193,9 +3193,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
-	// the add sheet counts what it showed of the partners and what was
-	// opened of them (provider.CountPartner); only listed partners count.
-	// Those shown are no longer new (provider.NoticePartners).
+	// Official partner data is fetched only by the explicit button. The
+	// legacy event route below only marks shown partners noticed locally;
+	// provider.CountPartner is permanently disabled in this fork.
+	mux.HandleFunc("POST /api/partners/refresh", func(rw http.ResponseWriter, r *http.Request) {
+		if err := provider.RefreshPartners(r.Context()); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeProvidersJSON(rw, providersState())
+	})
 	mux.HandleFunc("POST /api/partner", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			What string

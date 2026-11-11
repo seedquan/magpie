@@ -1,9 +1,9 @@
 package provider
 
 import (
-	"context"
+	"encoding/json"
 	"os"
-	"sync/atomic"
+	"path/filepath"
 	"testing"
 )
 
@@ -21,18 +21,25 @@ func TestPartnerStartsAtTheUsersRegion(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	was, wasIcon := inMainlandChina, fetchPartnerIcon
-	t.Cleanup(func() { inMainlandChina, fetchPartnerIcon = was, wasIcon; resetPartners() })
-	fetchPartnerIcon = func(context.Context, string) (string, error) { return "", os.ErrNotExist }
-	var body atomic.Value
-	body.Store(string(feed))
-	t.Setenv("MAGPIE_PARTNERS", partnerFeedServer(t, &body).URL)
+	was := inMainlandChina
+	t.Cleanup(func() { inMainlandChina = was; resetPartners() })
+	t.Setenv("MAGPIE_PARTNERS", "")
+	var cache partnerCache
+	if err := json.Unmarshal(feed, &cache); err != nil {
+		t.Fatal(err)
+	}
+	cache.Seen = map[string]Partner{}
+	for _, p := range cache.Partners {
+		cache.Seen[p.ID] = p
+	}
+	b, _ := json.Marshal(cache)
+	os.MkdirAll(filepath.Dir(partnerCacheFile()), 0o700)
+	os.WriteFile(partnerCacheFile(), b, 0o600)
 
 	at := func(where int) Provider {
 		t.Helper()
 		inMainlandChina = func() int { return where }
 		resetPartners()
-		fetchPartnersNow()
 		p, err := FromPreset("kimi")
 		if err != nil {
 			t.Fatal(err)

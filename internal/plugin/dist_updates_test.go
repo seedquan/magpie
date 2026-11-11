@@ -19,7 +19,7 @@ import (
 // edge of jsDelivr serving the index with 0.2.3 as its latest). A plugin
 // with no newer version anywhere stays current, not unknown.
 func TestDistOnlyPluginUpdatesPastAStaleMirror(t *testing.T) {
-	for _, how := range []string{"hourly", "update"} {
+	for _, how := range []string{"check", "update"} {
 		t.Run(how, func(t *testing.T) {
 			sandbox(t)
 			const pkg = "@magpie-community/opencode-codearts-auth"
@@ -56,13 +56,19 @@ func TestDistOnlyPluginUpdatesPastAStaleMirror(t *testing.T) {
 				t.Fatalf("Check for updates found %+v for River, want 0.1.0 current", c)
 			}
 
-			if how == "hourly" {
+			if how == "check" {
 				u, err := CheckUpdates(ctx)
 				if err != nil {
 					t.Fatalf("CheckUpdates: %v", err)
 				}
-				if len(u.Updated) != 1 || u.Updated[0].Package != pkg || u.Updated[0].From != "0.2.3" || u.Updated[0].To != "0.2.4" {
-					t.Fatalf("the hourly look updated %+v, want CodeArts 0.2.3 to 0.2.4", u.Updated)
+				if len(u.Updated) != 0 || len(u.Waiting) != 1 || u.Waiting[0].Package != pkg {
+					t.Fatalf("check changed code or lost update: %+v", u)
+				}
+				if v := Installed(pkg); v != "0.2.3" {
+					t.Fatalf("check installed %s", v)
+				}
+				if err := Upgrade(ctx, pkg); err != nil {
+					t.Fatal(err)
 				}
 			} else if err := Upgrade(ctx, pkg); err != nil {
 				t.Fatalf("Update: %v", err)

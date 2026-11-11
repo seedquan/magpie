@@ -249,12 +249,8 @@ func catalogParses(b []byte) bool {
 	return json.Unmarshal(b, &v) == nil
 }
 
-// writeOwnList writes the model list magpie keeps for Codex at path. A file
-// there that doesn't parse is copied aside first: Keep (#1450) holds
-// nothing of a file it can't read, so writing the new list over one would
-// end the keys the user added by hand with no copy (#2263's rule for
-// magpie's state files, which this file had missed). An error stops the
-// write.
+// writeOwnList refuses to replace a damaged catalog, preserving its bytes
+// without creating a recovery copy.
 func writeOwnList(path string, b []byte) error {
 	if err := lastgood.KeepUnparsed(path, catalogParses); err != nil {
 		return err
@@ -355,9 +351,7 @@ func codexIn(at place) *Agent {
 		}
 		b := list()
 		if string(codexcat.Keep(cur, b)) == string(b) {
-			// one that doesn't parse is copied aside before it goes: Keep
-			// held nothing of it, so removing it outright would end the
-			// user's own keys with no copy
+			// A malformed original remains in place for explicit repair.
 			if err := lastgood.KeepUnparsed(catalogPath, catalogParses); err != nil {
 				return
 			}

@@ -165,7 +165,7 @@ func TestPruneKeepsSkillsSetAside(t *testing.T) {
 		t.Error("the skill set aside was pruned")
 	}
 	es, _ := os.ReadDir(BackupDir())
-	if len(es) != keepBackups+1 {
+	if len(es) != keepBackups+4 {
 		t.Errorf("%d backups", len(es))
 	}
 }

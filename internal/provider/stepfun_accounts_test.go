@@ -265,14 +265,14 @@ func TestStepFunUnparsedKept(t *testing.T) {
 
 	acc, ref := stepfunTokens("4161", time.Now().Add(time.Hour), true)
 	f.access.Store(acc)
-	if err := SaveStepFunSession(ctx, "stepfun", "ai", acc, ref, "web-1"); err != nil {
-		t.Fatal(err)
+	if err := SaveStepFunSession(ctx, "stepfun", "ai", acc, ref, "web-1"); err == nil {
+		t.Fatal("corrupt session overwritten")
 	}
 	kept, _ := filepath.Glob(stepfunPath() + ".bad-*")
-	if len(kept) != 1 {
+	if len(kept) != 0 {
 		t.Fatalf("kept aside: %v", kept)
 	}
-	if b, _ := os.ReadFile(kept[0]); string(b) != string(bad) {
+	if b, _ := os.ReadFile(stepfunPath()); string(b) != string(bad) {
 		t.Fatalf("kept aside as %s", b)
 	}
 }

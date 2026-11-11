@@ -58,7 +58,7 @@ func TestRestartReadsCacheBeforeATruncatedRecord(t *testing.T) {
 	}
 }
 
-func TestTruncatedRecordDoesNotBlockCompaction(t *testing.T) {
+func TestTruncatedRecordStopsCompactionWithoutCopies(t *testing.T) {
 	fresh(t)
 	s := New()
 	key1 := fmt.Sprintf("%064x", 31)
@@ -78,8 +78,8 @@ func TestTruncatedRecordDoesNotBlockCompaction(t *testing.T) {
 	s.saveSight(key2, "after the crash", "probe/eye")
 
 	records, _, malformed, err := readSavedSights(s.sightFile)
-	if err != nil || malformed || len(records) != 2 {
-		t.Fatalf("compaction kept a malformed line: %d records, malformed=%v, err=%v", len(records), malformed, err)
+	if err != nil || !malformed || len(records) != 1 {
+		t.Fatalf("damaged cache changed: %d records, malformed=%v, err=%v", len(records), malformed, err)
 	}
 	entries, err := os.ReadDir(filepath.Dir(s.sightFile))
 	if err != nil {
@@ -91,14 +91,14 @@ func TestTruncatedRecordDoesNotBlockCompaction(t *testing.T) {
 			backedUp = true
 		}
 	}
-	if !backedUp {
-		t.Fatal("the malformed file wasn't preserved before compaction")
+	if backedUp {
+		t.Fatal("compaction generated a recovery copy")
 	}
 	restarted := New()
 	restarted.sightMu.Lock()
 	defer restarted.sightMu.Unlock()
-	if restarted.sights[key1] == nil || restarted.sights[key2] == nil {
-		t.Fatalf("valid records were lost: key1=%v key2=%v", restarted.sights[key1], restarted.sights[key2])
+	if restarted.sights[key1] == nil || restarted.sights[key2] != nil {
+		t.Fatalf("restart did not preserve the original disk state: key1=%v key2=%v", restarted.sights[key1], restarted.sights[key2])
 	}
 }
 

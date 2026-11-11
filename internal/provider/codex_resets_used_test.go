@@ -167,7 +167,7 @@ func TestResetUseNotKeptWhenNothingSpent(t *testing.T) {
 // A file that doesn't parse is copied aside before a new use is written,
 // never taken for none and written over; a use older than resetsUsedKeep
 // is let go.
-func TestResetUsesUnreadableKeptAside(t *testing.T) {
+func TestResetUsesUnreadableLeftIntact(t *testing.T) {
 	signIn(t)
 	p := resetsUsedPath()
 	os.MkdirAll(filepath.Dir(p), 0o755)
@@ -179,14 +179,14 @@ func TestResetUsesUnreadableKeptAside(t *testing.T) {
 	}
 	noteResetUsed("me@example.com", ResetUsedByHand, ResetOutcome{Code: "reset", Windows: 1})
 	aside, _ := filepath.Glob(p + ".bad-*")
-	if len(aside) != 1 {
+	if len(aside) != 0 {
 		t.Fatalf("copied aside: %v", aside)
 	}
-	if b, _ := os.ReadFile(aside[0]); string(b) != "{not json" {
+	if b, _ := os.ReadFile(p); string(b) != "{not json" {
 		t.Fatalf("aside holds %q", b)
 	}
-	if got := ResetsUsed("me@example.com"); len(got) != 1 {
-		t.Fatalf("after a use: %+v", got)
+	if got := ResetsUsed("me@example.com"); len(got) != 0 {
+		t.Fatalf("corrupt original was overwritten: %+v", got)
 	}
 	// an old one goes on the next write
 	old := []ResetUse{{User: "me@example.com", At: time.Now().Add(-resetsUsedKeep - time.Hour), Why: ResetUsedWeek}}

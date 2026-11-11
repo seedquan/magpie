@@ -434,8 +434,8 @@ func TestKeepMovedCurrent(t *testing.T) {
 	}
 	_ = setMigration("fakeco", func(m *Migration) { m.State = MovePlugin })
 	keepMovedCurrent(context.Background())
-	if strings.Join(asked, " ") != "fake@0.2.0" {
-		t.Fatalf("asked %v, want fake@0.2.0", asked)
+	if len(asked) != 0 {
+		t.Fatalf("background upgrade asked %v", asked)
 	}
 }
 

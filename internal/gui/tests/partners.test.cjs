@@ -131,10 +131,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.context().close();
       });
     }
-    // how often each partner is shown, opened and its key page opened is
-    // counted (provider.CountPartner): shown once per opening of the sheet,
-    // not again as it is redrawn or searched
-    await t.test("counted", async () => {
+    // Only the local shown marker is saved; opening a tile or key page
+    // never submits interaction telemetry. Searching does not repeat it.
+    await t.test("shown is kept locally without interaction telemetry", async () => {
       const page = await (await browser.newContext({ viewport: { width: 900, height: 800 } })).newPage();
       const counted = [];
       const list = partners.map((p) => (p.id === "acme" ? { ...p, keysUrl: "https://acme.example/keys" } : p));
@@ -151,7 +150,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await sheet.locator(".tile", { hasText: "Acme AI" }).click();
       await page.locator("#modal .editor").getByRole("button", { name: "Get a key ↗" }).click();
       await page.waitForTimeout(100);
-      assert.deepEqual(counted.slice(1), [{ what: "opened", ids: ["acme"] }, { what: "keys", ids: ["acme"] }]);
+      assert.deepEqual(counted, [{ what: "shown", ids: ["acme", "taken"] }]);
       await page.context().close();
     });
     // a partner listed since the sheet last showed them puts a small dot on
@@ -280,5 +279,62 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(heads[0], "Subscriptions");
       await page.context().close();
     });
+  });
+}
+
+const fetchWords = { en: "Fetch partner list", zh: "获取合作商列表", "zh-TW": "取得合作商清單", ja: "パートナー一覧を取得", de: "Partnerliste abrufen" };
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": partner feed is fetched only by the explicit button", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const [lang, word] of Object.entries(fetchWords)) for (const width of [1100, 420]) {
+      await t.test(lang + " " + width, async () => {
+        const context = await browser.newContext({ viewport: { width, height: 800 } });
+        const page = await context.newPage();
+        try {
+          let list = [], requests = 0, reject = false, finish, seen;
+          const nextRequest = () => new Promise((resolve) => { seen = resolve; });
+          const errors = [];
+          page.on("pageerror", (e) => errors.push(e.message));
+          await page.route("**/*", async (route) => {
+            const u = new URL(route.request().url());
+            if (u.pathname === "/api/partners/refresh") {
+              assert.equal(route.request().method(), "POST");
+              requests++;
+              seen?.();
+              await new Promise((resolve) => { finish = resolve; });
+              if (reject) return route.fulfill({ status: 502, json: { error: "partner feed offline" } });
+              list = [partner("manual", "Manual Partner")];
+              return route.fulfill({ json: { providers, presets: [...list, ...presets], excluded: [], gateway: { running: true, window: true } } });
+            }
+            return server(lang, list)(route);
+          });
+          const sheet = await openSheet(page);
+          const button = sheet.locator("#fetchPartners");
+          assert.equal(await button.textContent(), word);
+          assert.equal(requests, 0, "opening the app or Add sheet fetched the feed");
+          assert.equal(await sheet.locator(".tile", { hasText: "Manual Partner" }).count(), 0);
+          const firstRequest = nextRequest();
+          await button.click();
+          await firstRequest;
+          assert.equal(requests, 1);
+          assert.equal(await button.isDisabled(), true);
+          finish();
+          await sheet.locator(".tile", { hasText: "Manual Partner" }).waitFor();
+          await page.waitForFunction(() => !document.querySelector("#fetchPartners").disabled);
+          assert.equal(await sheet.evaluate((s) => s.scrollWidth > s.clientWidth + 1), false, JSON.stringify(await sheet.evaluate((s) => [...s.querySelectorAll("*")].filter((e) => e.getBoundingClientRect().right > s.getBoundingClientRect().right + 1).slice(0, 8).map((e) => ({ tag: e.tagName, cls: e.className, text: e.textContent.slice(0, 60), right: e.getBoundingClientRect().right, edge: s.getBoundingClientRect().right })))));
+          reject = true;
+          const secondRequest = nextRequest();
+          await sheet.locator("#fetchPartners").click();
+          await page.waitForFunction(() => document.querySelector("#fetchPartners").disabled);
+          await secondRequest;
+          finish();
+          await page.waitForFunction(() => !document.querySelector("#fetchPartners").disabled);
+          assert.equal(await sheet.locator(".tile", { hasText: "Manual Partner" }).count(), 1, "a failed fetch dropped the cached list");
+          assert.equal(requests, 2, "failure retried without another click");
+          assert.deepEqual(errors, []);
+        } finally { await context.close(); }
+      });
+    }
   });
 }
